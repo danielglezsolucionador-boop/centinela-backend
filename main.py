@@ -8,6 +8,7 @@ from core.pipeline.event_pipeline import EventPipeline
 from core.engines.risk_engine import RiskEngine
 from core.engines.threat_correlation import ThreatCorrelationEngine
 from core.memory.threat_memory import ThreatMemory
+from core.database import init_db, save_event, save_incident, get_stats
 
 app = FastAPI(
     title="CENTINELA Core Intelligence Engine",
@@ -27,6 +28,10 @@ threat_memory = ThreatMemory()
 risk_engine = RiskEngine(threat_memory)
 correlation_engine = ThreatCorrelationEngine(threat_memory)
 pipeline = EventPipeline(risk_engine, correlation_engine, threat_memory)
+
+@app.on_event("startup")
+async def startup():
+    init_db()
 
 class ConnectionManager:
     def __init__(self):
@@ -56,6 +61,10 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             event = json.loads(data)
             result = await pipeline.process(event)
+            if result.get("detection", {}).get("threat_detected"):
+                save_event(result)
+                for inc in result.get("incidents", []):
+                    save_incident(inc)
             await manager.broadcast(result)
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -63,6 +72,10 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.post("/api/v1/event")
 async def ingest_event(event: dict):
     result = await pipeline.process(event)
+    save_event(result)
+    if result.get("detection", {}).get("threat_detected"):
+        for inc in result.get("incidents", []):
+            save_incident(inc)
     await manager.broadcast(result)
     return result
 
@@ -79,6 +92,10 @@ async def analyze_prompt(payload: dict):
         "metadata": payload.get("metadata", {}),
     }
     result = await pipeline.process(event)
+    save_event(result)
+    if result.get("detection", {}).get("threat_detected"):
+        for inc in result.get("incidents", []):
+            save_incident(inc)
     await manager.broadcast(result)
     return result
 
@@ -98,17 +115,24 @@ async def get_active_correlations():
 async def get_incidents():
     return threat_memory.get_incidents()
 
+@app.get("/api/v1/stats/db")
+async def get_db_stats():
+    return get_stats()
+
 @app.get("/api/v1/health")
 async def health():
+    db_stats = get_stats()
     return {
         "status": "OPERATIONAL",
         "engine": "CENTINELA Core v1.0",
         "timestamp": datetime.utcnow().isoformat(),
+        "database": "CONNECTED" if db_stats else "RAM_ONLY",
         "components": {
             "pipeline": "ONLINE",
             "risk_engine": "ONLINE",
             "correlation_engine": "ONLINE",
             "threat_memory": "ONLINE",
+            "postgresql": "ONLINE" if db_stats else "PENDING",
         }
     }
 
