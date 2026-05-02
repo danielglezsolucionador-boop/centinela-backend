@@ -32,10 +32,10 @@ Base.metadata.create_all(bind=engine)
 
 # ── Helpers ───────────────────────────────────────────────────────────
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return _bcrypt.hashpw(password[:72].encode(), _bcrypt.gensalt()).decode()
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return _bcrypt.checkpw(plain[:72].encode(), hashed.encode())
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
