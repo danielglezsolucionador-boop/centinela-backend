@@ -79,7 +79,8 @@ class ThreatMemory:
             "users_tracked": len(self.user_index),
             "threat_patterns": len(self.threat_patterns),
         }
-def add_threat_fingerprint(self, fingerprint_data: dict):
+
+    def add_threat_fingerprint(self, fingerprint_data: dict):
         fp_key = f"{fingerprint_data.get('threat_types', [])}:{fingerprint_data.get('content_preview', '')[:50]}"
         self.fingerprints.add(fp_key)
         self.threat_patterns.append({
@@ -91,6 +92,7 @@ def add_threat_fingerprint(self, fingerprint_data: dict):
         })
         if len(self.threat_patterns) > 5000:
             self.threat_patterns = self.threat_patterns[-2500:]
+
     def _fingerprint(self, event: dict) -> str:
         content = event.get("content", "")
         threat_types = ",".join(sorted(event.get("detection", {}).get("threat_types", [])))
