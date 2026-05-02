@@ -1,6 +1,6 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-import asyncio
+from fastapi.security import HTTPBearer
 import json
 import uuid
 from datetime import datetime
@@ -14,6 +14,10 @@ from core.engines.observability_engine import ObservabilityEngine
 from core.engines.agent_security import AgentSecurityEngine
 from core.memory.threat_memory import ThreatMemory
 from core.database import init_db, save_event, save_incident, get_stats
+from core.auth import (
+    get_current_user, get_admin_user, init_default_admin,
+    create_access_token, verify_password, create_user, get_user
+)
 
 app = FastAPI(
     title="CENTINELA Core Intelligence Engine",
@@ -29,7 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializar todos los motores
+# ── Initialize Core Engines ──────────────────────────────────────────
 threat_memory = ThreatMemory()
 risk_engine = RiskEngine(threat_memory)
 correlation_engine = ThreatCorrelationEngine(threat_memory)
@@ -43,8 +47,10 @@ pipeline = EventPipeline(risk_engine, correlation_engine, threat_memory)
 @app.on_event("startup")
 async def startup():
     init_db()
+    init_default_admin()
     print("CENTINELA Core v2.0 — All engines online")
 
+# ── WebSocket Manager ─────────────────────────────────────────────────
 class ConnectionManager:
     def __init__(self):
         self.active: list[WebSocket] = []
@@ -66,34 +72,20 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# ── Full Pipeline ─────────────────────────────────────────────────────
 async def process_full_pipeline(event: dict) -> dict:
-    # 1. Pipeline base
     result = await pipeline.process(event)
-
-    # 2. Threat Detection
     content = event.get("content", "")
     detection = threat_detection.analyze(content, {
         "agent": event.get("agent"),
         "model": event.get("model"),
         "user": event.get("user"),
     })
-
-    # 3. Risk Engine
     risk = result.get("risk", {"score": 0, "level": "LOW"})
-
-    # 4. Policy Engine
     policy = policy_engine.evaluate(event, detection, risk)
-
-    # 5. Response Engine
     response = response_engine.respond(event, detection, policy)
-
-    # 6. Observability
     trace = observability_engine.record_trace(event, detection, risk, policy)
-
-    # 7. Agent Security
     agent_analysis = agent_security.analyze_agent_behavior(event, risk)
-
-    # 8. Persistir en DB
     enriched = {
         **result,
         "detection": detection,
@@ -103,13 +95,57 @@ async def process_full_pipeline(event: dict) -> dict:
         "agent_status": agent_analysis.get("status"),
     }
     save_event(enriched)
-
     if detection.get("threat_detected"):
         for inc in result.get("incidents", []):
             save_incident(inc)
-
     return enriched
 
+# ── Auth Routes ───────────────────────────────────────────────────────
+@app.post("/api/v1/auth/login")
+async def login(payload: dict):
+    username = payload.get("username")
+    password = payload.get("password")
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password required")
+    user = get_user(username)
+    if not user or not verify_password(password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="User inactive")
+    token = create_access_token({"sub": user.username})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "username": user.username,
+        "email": user.email,
+        "is_admin": user.is_admin,
+    }
+
+@app.post("/api/v1/auth/register")
+async def register(payload: dict, current_user=Depends(get_admin_user)):
+    username = payload.get("username")
+    email = payload.get("email")
+    password = payload.get("password")
+    is_admin = payload.get("is_admin", False)
+    if not username or not email or not password:
+        raise HTTPException(status_code=400, detail="username, email and password required")
+    existing = get_user(username)
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    user = create_user(username, email, password, is_admin)
+    return {"id": user.id, "username": user.username, "email": user.email, "is_admin": user.is_admin}
+
+@app.get("/api/v1/auth/me")
+async def me(current_user=Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "is_admin": current_user.is_admin,
+        "created_at": current_user.created_at,
+    }
+
+# ── WebSocket ─────────────────────────────────────────────────────────
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -122,20 +158,21 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+# ── Protected Routes ──────────────────────────────────────────────────
 @app.post("/api/v1/event")
-async def ingest_event(event: dict):
+async def ingest_event(event: dict, current_user=Depends(get_current_user)):
     result = await process_full_pipeline(event)
     await manager.broadcast(result)
     return result
 
 @app.post("/api/v1/prompt/analyze")
-async def analyze_prompt(payload: dict):
+async def analyze_prompt(payload: dict, current_user=Depends(get_current_user)):
     event = {
         "id": str(uuid.uuid4()),
         "type": "PROMPT",
         "timestamp": datetime.utcnow().isoformat(),
         "agent": payload.get("agent", "unknown"),
-        "user": payload.get("user", "unknown"),
+        "user": payload.get("user", current_user.username),
         "model": payload.get("model", "claude-sonnet"),
         "content": payload.get("prompt", ""),
         "metadata": payload.get("metadata", {}),
@@ -145,71 +182,72 @@ async def analyze_prompt(payload: dict):
     return result
 
 @app.get("/api/v1/threat-memory")
-async def get_threat_memory():
+async def get_threat_memory(current_user=Depends(get_current_user)):
     return threat_memory.get_summary()
 
 @app.get("/api/v1/risk/ecosystem")
-async def get_ecosystem_risk():
+async def get_ecosystem_risk(current_user=Depends(get_current_user)):
     return risk_engine.get_ecosystem_scores()
 
 @app.get("/api/v1/correlations/active")
-async def get_active_correlations():
+async def get_active_correlations(current_user=Depends(get_current_user)):
     return correlation_engine.get_active_correlations()
 
 @app.get("/api/v1/incidents")
-async def get_incidents():
+async def get_incidents(current_user=Depends(get_current_user)):
     return threat_memory.get_incidents()
 
 @app.get("/api/v1/detection/stats")
-async def get_detection_stats():
+async def get_detection_stats(current_user=Depends(get_current_user)):
     return threat_detection.get_stats()
 
 @app.get("/api/v1/policy/all")
-async def get_all_policies():
+async def get_all_policies(current_user=Depends(get_current_user)):
     return policy_engine.get_all_policies()
 
 @app.post("/api/v1/policy/update")
-async def update_policy(payload: dict):
+async def update_policy(payload: dict, current_user=Depends(get_admin_user)):
     agent = payload.get("agent", "DEFAULT")
     updates = payload.get("updates", {})
     return policy_engine.update_policy(agent, updates)
 
 @app.get("/api/v1/policy/stats")
-async def get_policy_stats():
+async def get_policy_stats(current_user=Depends(get_current_user)):
     return policy_engine.get_stats()
 
 @app.get("/api/v1/response/stats")
-async def get_response_stats():
+async def get_response_stats(current_user=Depends(get_current_user)):
     return response_engine.get_stats()
 
 @app.get("/api/v1/response/containments")
-async def get_containments():
+async def get_containments(current_user=Depends(get_current_user)):
     return response_engine.get_active_containments()
 
 @app.post("/api/v1/response/resolve/{containment_id}")
-async def resolve_containment(containment_id: str):
+async def resolve_containment(containment_id: str, current_user=Depends(get_admin_user)):
     return response_engine.resolve_containment(containment_id)
 
 @app.get("/api/v1/observability/metrics")
-async def get_observability_metrics():
+async def get_observability_metrics(current_user=Depends(get_current_user)):
     return observability_engine.get_dashboard_metrics()
 
 @app.get("/api/v1/agents/map")
-async def get_agent_map():
+async def get_agent_map(current_user=Depends(get_current_user)):
     return agent_security.get_agent_map()
 
 @app.get("/api/v1/agents/stats")
-async def get_agent_stats():
+async def get_agent_stats(current_user=Depends(get_current_user)):
     return agent_security.get_stats()
 
 @app.get("/api/v1/agents/anomalies")
-async def get_agent_anomalies():
+async def get_agent_anomalies(current_user=Depends(get_current_user)):
     return agent_security.get_recent_anomalies()
 
 @app.get("/api/v1/stats/db")
-async def get_db_stats():
+async def get_db_stats(current_user=Depends(get_current_user)):
     return get_stats()
 
+# ── Health (público) ──────────────────────────────────────────────────
 @app.get("/api/v1/health")
 async def health():
     db_stats = get_stats()
