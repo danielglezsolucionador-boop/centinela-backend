@@ -1,9 +1,9 @@
 import os
 import uuid
+import bcrypt as _bcrypt
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import Column, String, Boolean, DateTime
@@ -12,9 +12,8 @@ from core.database import Base, SessionLocal, engine
 # ── Config ────────────────────────────────────────────────────────────
 SECRET_KEY = os.environ.get("SECRET_KEY", "centinela-secret-key-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer(auto_error=False)
 
 # ── User Model ────────────────────────────────────────────────────────
@@ -99,7 +98,7 @@ async def get_admin_user(current_user=Depends(get_current_user)):
 # ── Create default admin on startup ──────────────────────────────────
 def init_default_admin():
     admin_username = os.environ.get("ADMIN_USERNAME", "daniel")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "centinela2024")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "Centinela24")
     admin_email = os.environ.get("ADMIN_EMAIL", "daniel.glez.solucionador@gmail.com")
     existing = get_user(admin_username)
     if not existing:
