@@ -139,26 +139,6 @@ class ThreatDetectionEngine:
         threat_detected = total_score >= 35 or len(detected_threats) > 0
 
         if threat_detected:
-            self.detection_stats["threats_detected"] += 1
-            if self.threat_memory:
-                self.threat_memory.add_threat_fingerprint({
-                    "content_preview": content[:200],
-                    "threat_types": detected_threats,
-                    "score": total_score,
-                    "patterns": matched_patterns[:5],
-                    "timestamp": datetime.utcnow().isoformat(),
-                })
-
-        # Severidad
-        if total_score >= 80:
-            severity = "CRITICAL"
-        elif total_score >= 60:
-            severity = "HIGH"
-        elif total_score >= 40:
-            severity = "MEDIUM"
-        elif total_score >= 20:
-            severity = "LOW"
-        else:
             severity = "NONE"
 
         return {

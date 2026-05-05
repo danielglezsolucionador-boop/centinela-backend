@@ -172,7 +172,7 @@ async def ingest_event(event: dict, current_user=Depends(get_current_user)):
     return result
 
 @app.post("/api/v1/prompt/analyze")
-async def analyze_prompt(payload: dict, current_user=Depends(get_current_user)):
+async def analyze_prompt(payload: dict):
     event = {
         "id": str(uuid.uuid4()),
         "type": "PROMPT",
@@ -291,3 +291,4 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
