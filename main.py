@@ -189,7 +189,8 @@ async def analyze_prompt(payload: dict):
 
 @app.get("/api/v1/threat-memory")
 async def get_threat_memory():
-    return threat_memory.get_summary()
+    from core.database import get_stats
+    return get_stats()
 
 @app.get("/api/v1/risk/ecosystem")
 async def get_ecosystem_risk():
@@ -291,6 +292,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
 
 
 
