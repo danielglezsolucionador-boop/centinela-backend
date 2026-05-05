@@ -23,8 +23,8 @@ from core.auth import (
 )
 
 limiter = Limiter(key_func=get_remote_address)
- app = FastAPI(
-     title="CENTINELA Core Intelligence Engine",
+app = FastAPI(
+    title="CENTINELA Core Intelligence Engine",
     description="AI Runtime Security Platform — Core Backend",
     version="2.0.0"
 )
