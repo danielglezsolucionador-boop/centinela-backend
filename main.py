@@ -178,7 +178,7 @@ async def analyze_prompt(payload: dict):
         "type": "PROMPT",
         "timestamp": datetime.utcnow().isoformat(),
         "agent": payload.get("agent", "unknown"),
-        "user": payload.get("user", current_user.username),
+        "user": payload.get("user", "anonymous"),
         "model": payload.get("model", "claude-sonnet"),
         "content": payload.get("prompt", ""),
         "metadata": payload.get("metadata", {}),
@@ -291,4 +291,5 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
 
