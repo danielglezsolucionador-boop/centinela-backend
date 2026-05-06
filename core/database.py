@@ -71,7 +71,7 @@ def save_event(event: dict):
             id=event.get("id", ""),
             timestamp=datetime.utcnow(),
             agent=event.get("agent", "unknown"),
-            user=event.get("user", "unknown"),
+            user_id=event.get("user", "unknown"),
             model=event.get("model", "unknown"),
             content=str(event.get("content", ""))[:2000],
             risk_score=event.get("risk", {}).get("score", 0) if isinstance(event.get("risk"), dict) else 0,
