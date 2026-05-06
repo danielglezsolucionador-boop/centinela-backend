@@ -251,7 +251,9 @@ async def get_agent_anomalies(current_user=Depends(get_current_user)):
 
 @app.get("/api/v1/stats/db")
 async def get_db_stats(current_user=Depends(get_current_user)):
-    return get_stats()
+    result = get_stats()
+    print(f"[DEBUG] get_stats: {result}")
+    return result if result else {"total_events": 0, "threat_events": 0, "blocked_events": 0, "total_incidents": 0}
 
 # ── Health (público) ──────────────────────────────────────────────────
 @app.post("/api/v1/admin/reset")
@@ -309,4 +311,5 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
 
