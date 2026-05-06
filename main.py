@@ -313,3 +313,14 @@ if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
 
+
+@app.post("/api/v1/admin/reset-db")
+async def reset_db(request: Request, current_user=Depends(get_current_user)):
+    body = await request.json()
+    if body.get("confirm") != "yes":
+        return {"error": "Send confirm=yes"}
+    from core.database import Base, engine
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    return {"status": "DB recreada limpia"}
+
