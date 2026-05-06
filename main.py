@@ -266,6 +266,17 @@ async def reset_admin():
         db.close()
     create_user("daniel", "daniel.glez.solucionador@gmail.com", "Centinela24", is_admin=True)
     return {"status": "admin reset ok"}
+@app.post("/api/v1/admin/migrate")
+async def run_migration():
+    from core.database import engine
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text('ALTER TABLE events RENAME COLUMN "user" TO user_id'))
+            conn.commit()
+        return {"status": "migrated"}
+    except Exception as e:
+        return {"status": "already done", "detail": str(e)}
 @app.get("/api/v1/health")
 async def health():
     db_stats = get_stats()
