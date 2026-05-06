@@ -277,7 +277,7 @@ async def run_migration():
         return {"status": "migrated"}
     except Exception as e:
         return {"status": "already done", "detail": str(e)}
-    @app.get("/api/v1/admin/db-columns")
+@app.get("/api/v1/admin/db-columns")
 async def get_db_columns():
     from core.database import engine
     from sqlalchemy import text
