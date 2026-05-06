@@ -156,8 +156,7 @@ class PolicyEngine:
         # Actualizar stats por agente
         if agent not in self.enforcement_stats["by_agent"]:
             self.enforcement_stats["by_agent"][agent] = {"blocked": 0, "warned": 0, "allowed": 0}
-       
-            action_key = {"BLOCK": "blocked", "WARN": "warned", "ALLOW": "allowed"}.get(action, "allowed")
+        action_key = {"BLOCK": "blocked", "WARN": "warned", "ALLOW": "allowed"}.get(action, "allowed")
         self.enforcement_stats["by_agent"][agent][action_key] += 1
 
         # Log de violaciones

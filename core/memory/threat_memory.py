@@ -179,7 +179,18 @@ class ThreatMemory:
             return {}
         finally:
             db.close()
-
+    def add_threat_fingerprint(self, fingerprint_data: dict):
+        fp_key = f"{fingerprint_data.get('threat_types', [])}:{fingerprint_data.get('content_preview', '')[:50]}"
+        self.fingerprints.add(fp_key)
+        self.threat_patterns.append({
+            "fingerprint": fp_key,
+            "type": fingerprint_data.get("threat_types", []),
+            "score": fingerprint_data.get("score", 0),
+            "patterns": fingerprint_data.get("patterns", []),
+            "timestamp": fingerprint_data.get("timestamp"),
+        })
+        if len(self.threat_patterns) > 5000:
+            self.threat_patterns = self.threat_patterns[-2500:]
     def _fingerprint(self, event: dict) -> str:
         content = event.get("content", "")
         threat_types = ",".join(sorted(event.get("detection", {}).get("threat_types", [])))
