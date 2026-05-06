@@ -18,7 +18,7 @@ class EventModel(Base):
     id = Column(String, primary_key=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     agent = Column(String, index=True)
-    user = Column(String, index=True)
+    user_id = Column(String, index=True)
     model = Column(String)
     content = Column(Text)
     risk_score = Column(Float, default=0)

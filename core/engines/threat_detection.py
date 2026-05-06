@@ -138,8 +138,19 @@ class ThreatDetectionEngine:
 
         threat_detected = total_score >= 35 or len(detected_threats) > 0
 
-        if threat_detected:
+        if not detected_threats:
             severity = "NONE"
+        elif total_score >= 80:
+            severity = "CRITICAL"
+        elif total_score >= 60:
+            severity = "HIGH"
+        elif total_score >= 35:
+            severity = "MEDIUM"
+        else:
+            severity = "LOW"
+        
+        if threat_detected:
+            self.detection_stats["threats_detected"] += 1
 
         return {
             "threat_detected": threat_detected,
