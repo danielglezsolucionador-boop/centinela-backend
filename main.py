@@ -278,10 +278,10 @@ async def run_migration():
     except Exception as e:
         return {"status": "already done", "detail": str(e)}
     @app.get("/api/v1/admin/db-columns")
-async def get_db_columns():
-    from core.database import engine
-    from sqlalchemy import text
-    with engine.connect() as conn:
+    async def get_db_columns():
+     from core.database import engine
+     from sqlalchemy import text
+     with engine.connect() as conn:
         result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='events'"))
         return {"columns": [row[0] for row in result]}
 @app.get("/api/v1/health")
