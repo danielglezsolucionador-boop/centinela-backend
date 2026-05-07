@@ -88,7 +88,9 @@ async def process_full_pipeline(event: dict) -> dict:
         "user": event.get("user"),
     }))
     risk = result.get("risk", {"score": 0, "level": "LOW"})
-    policy = policy_engine.evaluate(event, detection, risk)
+    if detection.get("threat_detected"):
+    risk["score"] = max(risk.get("score", 0), 75)
+policy = policy_engine.evaluate(event, detection, risk)
     response = response_engine.respond(event, detection, policy)
     trace = observability_engine.record_trace(event, detection, risk, policy)
     agent_analysis = agent_security.analyze_agent_behavior(event, risk)
