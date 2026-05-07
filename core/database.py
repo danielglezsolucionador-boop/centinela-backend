@@ -18,7 +18,7 @@ class EventModel(Base):
     id = Column(String, primary_key=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     agent = Column(String, index=True)
-    user_id = Column(String, index=True)
+    user = Column(String, index=True)
     model = Column(String)
     content = Column(Text)
     risk_score = Column(Float, default=0)
@@ -71,7 +71,7 @@ def save_event(event: dict):
             id=event.get("id", ""),
             timestamp=datetime.utcnow(),
             agent=event.get("agent", "unknown"),
-            user_id=event.get("user", "unknown"),
+            user=event.get("user", "unknown"),
             model=event.get("model", "unknown"),
             content=str(event.get("content", ""))[:2000],
             risk_score=event.get("risk", {}).get("score", 0) if isinstance(event.get("risk"), dict) else 0,
