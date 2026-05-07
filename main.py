@@ -16,7 +16,7 @@ from core.engines.response_engine import ResponseEngine
 from core.engines.observability_engine import ObservabilityEngine
 from core.engines.agent_security import AgentSecurityEngine
 from core.memory.threat_memory import ThreatMemory
-from core.database import init_db, save_event, save_incident, get_stats
+from core.database import init_db, save_event, save_incident, get_stats, SessionLocal, IncidentModel
 from core.auth import (
     get_current_user, get_admin_user, init_default_admin,
     create_access_token, verify_password, create_user, get_user
