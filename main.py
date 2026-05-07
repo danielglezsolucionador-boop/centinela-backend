@@ -204,21 +204,27 @@ async def get_incidents(current_user=Depends(get_current_user)):
     db = SessionLocal()
     try:
         records = db.query(IncidentModel).order_by(IncidentModel.created_at.desc()).limit(100).all()
-        return [
-            {
+        result = []
+        for r in records:
+            try:
+                threat_types = json.loads(r.threat_types) if r.threat_types and r.threat_types.strip() else []
+            except:
+                threat_types = []
+            result.append({
                 "id": r.id,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
                 "severity": r.severity,
                 "agent": r.agent,
                 "user": r.user,
                 "risk_score": r.risk_score,
-                "threat_types": json.loads(r.threat_types) if r.threat_types and r.threat_types.strip() else [],
+                "threat_types": threat_types,
                 "policy_action": r.policy_action,
                 "status": r.status,
                 "event_id": r.event_id,
-            }
-            for r in records
-        ]
+            })
+        return result
+    except Exception as e:
+        return {"error": str(e)}
     finally:
         db.close()
 
