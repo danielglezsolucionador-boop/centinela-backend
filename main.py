@@ -180,7 +180,7 @@ async def analyze_prompt(payload: dict):
         "agent": payload.get("agent", "unknown"),
         "user": payload.get("user", "anonymous"),
         "model": payload.get("model", "claude-sonnet"),
-        "content": payload.get("prompt", ""),
+        "content": payload.get("content", payload.get("prompt", "")),
         "metadata": payload.get("metadata", {}),
     }
     result = await process_full_pipeline(event)
