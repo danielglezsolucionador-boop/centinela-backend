@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import Optional
 from core.memory.threat_memory import ThreatMemory
 
-# Patrones de amenazas conocidas
 INJECTION_PATTERNS = [
     r"ignora\s+(las\s+)?instrucciones\s+(anteriores|previas|del\s+sistema)",
     r"ignore\s+(previous|prior|all|system)\s+instructions",
@@ -22,9 +21,9 @@ JAILBREAK_PATTERNS = [
     r"\bDAN\b",
     r"do\s+anything\s+now",
     r"jailbreak",
-    r"sin\s+restricciones\s+(éticas|morales|de\s+seguridad)",
+    r"sin\s+restricciones\s+(eticas|morales|de\s+seguridad)",
     r"without\s+(ethical|moral|safety)\s+restrictions",
-    r"actúa\s+como\s+si\s+(fueras|no\s+tuvieras)",
+    r"actua\s+como\s+si\s+(fueras|no\s+tuvieras)",
     r"act\s+as\s+if\s+you\s+(were|had\s+no)",
     r"pretend\s+you\s+(are|have\s+no)",
     r"imagina\s+que\s+eres\s+una\s+ia\s+sin",
@@ -34,18 +33,22 @@ JAILBREAK_PATTERNS = [
 ]
 
 DATA_EXFIL_PATTERNS = [
-    r"(envía|manda|send|forward)\s+.{0,50}(pastebin|hastebin|webhook|discord\.com/api)",
-    r"(muestra|reveal|show|display)\s+.{0,30}(api\s*key|token|secret|password|contraseña)",
+    r"(envia|manda|send|forward)\s+.{0,50}(pastebin|hastebin|webhook|discord\.com/api)",
+    r"(muestra|reveal|show|display)\s+.{0,30}(api\s*key|token|secret|password|contrasena)",
     r"(extrae|extract|dump)\s+.{0,30}(base\s+de\s+datos|database|credentials)",
     r"curl\s+.{0,100}(pastebin|webhook|external)",
-    r"(http|https)://(?!anthropic|openai|claude)",
+    r"acceder\s+a\s+datos\s+(confidenciales|privados|de\s+usuarios)",
+    r"(robar|robo|steal|theft)\s+.{0,30}(datos|data|informacion|information)",
+    r"sin\s+que\s+se\s+den\s+cuenta",
+    r"(acceso|access)\s+(no\s+autorizado|unauthorized)",
+    r"(http|https)://(?!anthropic|openai|claude|google|github)",
 ]
 
 EXTRACTION_PATTERNS = [
     r"(muestra|reveal|display|show|dime|tell\s+me)\s+.{0,40}(system\s+prompt|instrucciones\s+del\s+sistema|prompt\s+completo)",
     r"what\s+(are\s+your|is\s+your)\s+(instructions?|system\s+prompt|prompt)",
     r"(repite|repeat)\s+.{0,30}(instrucciones|instructions|prompt)",
-    r"(cuáles|what)\s+(son\s+tus|are\s+your)\s+(instrucciones|instructions|reglas|rules)",
+    r"(cuales|what)\s+(son\s+tus|are\s+your)\s+(instrucciones|instructions|reglas|rules)",
 ]
 
 ROLE_MANIPULATION_PATTERNS = [
@@ -55,12 +58,29 @@ ROLE_MANIPULATION_PATTERNS = [
     r"(desde\s+ahora|from\s+now\s+on)\s+(eres|you\s+are|act\s+as)",
 ]
 
+PII_PATTERNS = [
+    r"\b\d{8,}\b",
+    r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
+    r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",
+    r"(numero\s+de\s+tarjeta|card\s+number|cvv|fecha\s+de\s+vencimiento)",
+    r"(dni|ruc|pasaporte|numero\s+de\s+documento)\s*:?\s*\d+",
+]
+
+TOOL_ABUSE_PATTERNS = [
+    r"(ejecuta|execute|run)\s+.{0,30}(comando|command|script|shell)",
+    r"(elimina|delete|drop|truncate)\s+.{0,30}(tabla|table|base\s+de\s+datos|database)",
+    r"(modifica|modify|alter)\s+.{0,30}(sistema|system|archivo|file|registro|registry)",
+    r"(accede|access)\s+.{0,30}(sistema\s+de\s+archivos|filesystem|directorio\s+raiz|root)",
+]
+
 THREAT_PATTERNS = {
     "PROMPT_INJECTION": INJECTION_PATTERNS,
     "JAILBREAK": JAILBREAK_PATTERNS,
     "DATA_EXFILTRATION": DATA_EXFIL_PATTERNS,
     "SYSTEM_EXTRACTION": EXTRACTION_PATTERNS,
     "ROLE_MANIPULATION": ROLE_MANIPULATION_PATTERNS,
+    "PII_LEAKAGE": PII_PATTERNS,
+    "TOOL_ABUSE": TOOL_ABUSE_PATTERNS,
 }
 
 THREAT_WEIGHTS = {
@@ -69,13 +89,18 @@ THREAT_WEIGHTS = {
     "DATA_EXFILTRATION": 0.25,
     "SYSTEM_EXTRACTION": 0.20,
     "ROLE_MANIPULATION": 0.15,
+    "PII_LEAKAGE": 0.20,
+    "TOOL_ABUSE": 0.25,
 }
 
 SUSPICIOUS_KEYWORDS = [
     "bypass", "override", "unlimited", "unrestricted", "jailbreak",
     "hack", "exploit", "vulnerability", "injection", "payload",
-    "sin límites", "sin restricciones", "modo dios", "god mode",
+    "sin limites", "sin restricciones", "modo dios", "god mode",
     "root access", "admin mode", "sudo", "superuser",
+    "confidencial", "contrasena", "credenciales", "acceso no autorizado",
+    "datos privados", "informacion sensible", "sin que se den cuenta",
+    "robar datos", "extraer informacion",
 ]
 
 class ThreatDetectionEngine:
@@ -106,7 +131,6 @@ class ThreatDetectionEngine:
         threat_scores = {}
         matched_patterns = []
 
-        # Análisis de patrones
         for threat_type, patterns in self.compiled_patterns.items():
             matches = []
             for pattern in patterns:
@@ -122,17 +146,14 @@ class ThreatDetectionEngine:
                 matched_patterns.extend(matches)
                 self.detection_stats["by_type"][threat_type] += 1
 
-        # Análisis de keywords sospechosas
         suspicious_found = [
             kw for kw in SUSPICIOUS_KEYWORDS
             if kw.lower() in content_lower
         ]
         keyword_score = min(0.3, len(suspicious_found) * 0.06)
 
-        # Análisis heurístico
         heuristic_score = self._heuristic_analysis(content, context or {})
 
-        # Score final
         pattern_score = sum(threat_scores.values())
         total_score = min(100, (pattern_score * 60) + (keyword_score * 20) + (heuristic_score * 20))
 
@@ -148,7 +169,7 @@ class ThreatDetectionEngine:
             severity = "MEDIUM"
         else:
             severity = "LOW"
-        
+
         if threat_detected:
             self.detection_stats["threats_detected"] += 1
 
@@ -168,33 +189,27 @@ class ThreatDetectionEngine:
 
     def _heuristic_analysis(self, content: str, context: dict) -> float:
         score = 0.0
-        
-        # Longitud sospechosa
+
         if len(content) > 2000:
             score += 0.1
-        
-        # Muchos caracteres especiales
+
         special_chars = sum(1 for c in content if c in "[]{}()<>|\\")
         if special_chars > 10:
             score += 0.15
-        
-        # Cambios de idioma sospechosos
-        has_spanish = bool(re.search(r'[áéíóúñ¿¡]', content))
+
+        has_spanish = bool(re.search(r'[áéíóúñ¿¡]', content, re.UNICODE))
         has_english_commands = bool(re.search(r'\b(ignore|forget|pretend|act as)\b', content, re.I))
         if has_spanish and has_english_commands:
             score += 0.2
-        
-        # Instrucciones anidadas
+
         nested_instructions = content.count("instrucciones") + content.count("instructions")
         if nested_instructions > 2:
             score += 0.15
-        
-        # URLs externas
+
         external_urls = re.findall(r'https?://\S+', content)
         if external_urls:
             score += 0.2 * min(1.0, len(external_urls) * 0.3)
-        
-        # Contexto de agente de alto riesgo
+
         high_risk_agents = ["mcf", "cerebro", "sniff_amazon", "creador_apis"]
         if context.get("agent", "").lower() in high_risk_agents:
             score += 0.1
