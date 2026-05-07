@@ -201,7 +201,26 @@ async def get_active_correlations(current_user=Depends(get_current_user)):
 
 @app.get("/api/v1/incidents")
 async def get_incidents(current_user=Depends(get_current_user)):
-    return threat_memory.get_incidents()
+    db = SessionLocal()
+    try:
+        records = db.query(IncidentModel).order_by(IncidentModel.created_at.desc()).limit(100).all()
+        return [
+            {
+                "id": r.id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "severity": r.severity,
+                "agent": r.agent,
+                "user": r.user,
+                "risk_score": r.risk_score,
+                "threat_types": json.loads(r.threat_types) if r.threat_types else [],
+                "policy_action": r.policy_action,
+                "status": r.status,
+                "event_id": r.event_id,
+            }
+            for r in records
+        ]
+    finally:
+        db.close()
 
 @app.get("/api/v1/detection/stats")
 async def get_detection_stats(current_user=Depends(get_current_user)):
