@@ -82,11 +82,11 @@ manager = ConnectionManager()
 async def process_full_pipeline(event: dict) -> dict:
     result = await pipeline.process(event)
     content = event.get("content", "")
-    detection = threat_detection.analyze(content, {
+    detection = result.get("detection", threat_detection.analyze(content, {
         "agent": event.get("agent"),
         "model": event.get("model"),
         "user": event.get("user"),
-    })
+    }))
     risk = result.get("risk", {"score": 0, "level": "LOW"})
     policy = policy_engine.evaluate(event, detection, risk)
     response = response_engine.respond(event, detection, policy)
@@ -102,8 +102,9 @@ async def process_full_pipeline(event: dict) -> dict:
     }
     save_event(enriched)
     if detection.get("threat_detected"):
-        for inc in result.get("incidents", []):
-            save_incident(inc)
+        incident = result.get("incident")
+        if incident:
+            save_incident(incident)
     return enriched
 
 # ── Auth Routes ───────────────────────────────────────────────────────
