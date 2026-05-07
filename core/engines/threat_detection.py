@@ -42,6 +42,9 @@ DATA_EXFIL_PATTERNS = [
     r"sin\s+que\s+se\s+den\s+cuenta",
     r"(acceso|access)\s+(no\s+autorizado|unauthorized)",
     r"(http|https)://(?!anthropic|openai|claude|google|github)",
+    r"(provide|give\s+me|show\s+me|share)\s+.{0,40}(credential|password|secret|token|key|contrase)",
+    r"stored\s+in\s+your\s+(context|memory|system|prompt)",
+    r"print\s+your\s+.{0,30}(system\s+prompt|instructions|prompt)",
 ]
 
 EXTRACTION_PATTERNS = [
