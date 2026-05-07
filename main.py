@@ -212,7 +212,7 @@ async def get_incidents(current_user=Depends(get_current_user)):
                 "agent": r.agent,
                 "user": r.user,
                 "risk_score": r.risk_score,
-                "threat_types": json.loads(r.threat_types) if r.threat_types else [],
+                "threat_types": json.loads(r.threat_types) if r.threat_types and r.threat_types.strip() else [],
                 "policy_action": r.policy_action,
                 "status": r.status,
                 "event_id": r.event_id,
