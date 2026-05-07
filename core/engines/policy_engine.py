@@ -5,7 +5,7 @@ DEFAULT_POLICIES = {
     "PLUMA": {
         "max_risk_score": 70,
         "allowed_models": ["claude-haiku", "claude-sonnet", "gpt-4o"],
-        "blocked_threat_types": ["PROMPT_INJECTION", "DATA_EXFILTRATION"],
+        "blocked_threat_types": ["PROMPT_INJECTION", "DATA_EXFILTRATION", "JAILBREAK", "SYSTEM_EXTRACTION", "ROLE_MANIPULATION"],
         "max_prompt_length": 10000,
         "action_on_violation": "BLOCK",
         "alert_threshold": 50,
