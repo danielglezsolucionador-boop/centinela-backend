@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from core.engines.threat_detection import ThreatDetectionEngine
 
 
 class EventPipeline:
@@ -7,12 +8,13 @@ class EventPipeline:
         self.risk_engine = risk_engine
         self.correlation_engine = correlation_engine
         self.threat_memory = threat_memory
+        self.threat_engine = ThreatDetectionEngine(threat_memory)
 
     async def process(self, raw_event: dict) -> dict:
         event = self._normalize(raw_event)
         risk_result = self.risk_engine.score(event)
         event["risk"] = risk_result
-        detection = self._detect(event)
+        detection = self.threat_engine.analyze(event.get("content", ""), {"agent": event.get("agent", "unknown")})
         event["detection"] = detection
         correlation = self.correlation_engine.correlate(event)
         event["correlation"] = correlation
@@ -40,73 +42,33 @@ class EventPipeline:
             "session_id": raw.get("session_id", str(uuid.uuid4())),
         }
 
-    def _detect(self, event: dict) -> dict:
-        content = event.get("content", "").lower()
-        threats = []
-        injection_patterns = [
-            "ignore previous", "ignore all", "disregard",
-            "forget your instructions", "new instructions",
-            "you are now", "act as", "pretend you are",
-            "jailbreak", "dan mode", "developer mode",
-            "override", "bypass", "disable safety",
-        ]
-        exfil_patterns = [
-            "api key", "secret key", "password", "token",
-            "credentials", "private key", "access key",
-            "sunat", "clave sol", "ruc", "dni",
-        ]
-        role_patterns = [
-            "you are a", "roleplay", "simulate",
-            "hypothetically", "in this scenario",
-            "as an ai without", "unrestricted",
-        ]
-        detected_types = []
-        for p in injection_patterns:
-            if p in content:
-                detected_types.append("PROMPT_INJECTION")
-                threats.append({"type": "PROMPT_INJECTION", "pattern": p, "severity": "HIGH"})
-                break
-        for p in exfil_patterns:
-            if p in content:
-                detected_types.append("DATA_EXFILTRATION")
-                threats.append({"type": "DATA_EXFILTRATION", "pattern": p, "severity": "CRITICAL"})
-                break
-        for p in role_patterns:
-            if p in content:
-                detected_types.append("ROLE_MANIPULATION")
-                threats.append({"type": "ROLE_MANIPULATION", "pattern": p, "severity": "MEDIUM"})
-                break
-        return {
-            "threat_detected": len(threats) > 0,
-            "threat_types": list(set(detected_types)),
-            "threats": threats,
-            "threat_count": len(threats),
-        }
-
     def _enforce_policy(self, event: dict) -> dict:
         risk_score = event["risk"]["score"]
         threat_detected = event["detection"]["threat_detected"]
+        severity = event["detection"].get("severity", "NONE")
         agent = event.get("agent", "unknown")
         action = "ALLOW"
         reason = "Within policy bounds"
         restrictions = []
-        if risk_score >= 90 or any(t["severity"] == "CRITICAL" for t in event["detection"]["threats"]):
+        threats = event["detection"].get("threat_types", [])
+        if risk_score >= 90 or severity == "CRITICAL":
             action = "BLOCK"
             reason = "Critical risk threshold exceeded"
             restrictions = ["BLOCK_RESPONSE", "REVOKE_TOOL_ACCESS", "ISOLATE_AGENT"]
         elif risk_score >= 70 or threat_detected:
             action = "RESTRICT"
-            reason = "High risk — restricted mode activated"
+            reason = "High risk - restricted mode activated"
             restrictions = ["LIMIT_TOOL_CALLS", "SANITIZE_RESPONSE", "FLAG_FOR_REVIEW"]
         elif risk_score >= 50:
             action = "MONITOR"
-            reason = "Elevated risk — enhanced monitoring"
+            reason = "Elevated risk - enhanced monitoring"
             restrictions = ["LOG_DETAILED", "RATE_LIMIT"]
         return {
             "action": action,
             "reason": reason,
             "restrictions": restrictions,
             "agent": agent,
+            "threat_types": threats,
             "enforced_at": datetime.utcnow().isoformat(),
         }
 
