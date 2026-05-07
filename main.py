@@ -189,7 +189,7 @@ async def analyze_prompt(payload: dict):
 
 @app.get("/api/v1/threat-memory")
 async def get_threat_memory(current_user=Depends(get_current_user)):
-    return threat_memory.get_summary()
+    return get_stats()
 
 @app.get("/api/v1/risk/ecosystem")
 async def get_ecosystem_risk(current_user=Depends(get_current_user)):
@@ -251,9 +251,7 @@ async def get_agent_anomalies(current_user=Depends(get_current_user)):
 
 @app.get("/api/v1/stats/db")
 async def get_db_stats(current_user=Depends(get_current_user)):
-    result = get_stats()
-    print(f"[DEBUG] get_stats: {result}")
-    return result if result else {"total_events": 0, "threat_events": 0, "blocked_events": 0, "total_incidents": 0}
+    return get_stats()
 
 # ── Health (público) ──────────────────────────────────────────────────
 @app.post("/api/v1/admin/reset")
@@ -307,13 +305,6 @@ async def health():
             "postgresql": "ONLINE" if db_stats else "PENDING",
         }
     }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
-
-
 @app.post("/api/v1/admin/reset-db")
 async def reset_db(request: Request, current_user=Depends(get_current_user)):
     body = await request.json()
@@ -323,4 +314,9 @@ async def reset_db(request: Request, current_user=Depends(get_current_user)):
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     return {"status": "DB recreada limpia"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    
 
