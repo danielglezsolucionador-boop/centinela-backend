@@ -96,6 +96,9 @@ async def process_full_pipeline(event: dict) -> dict:
     agent_analysis = agent_security.analyze_agent_behavior(event, risk)
     enriched = {
         **result,
+        "user": event.get("user", "unknown"),
+        "agent": event.get("agent", "unknown"),
+        "model": event.get("model", "unknown"),
         "detection": detection,
         "policy": policy,
         "response": response,
