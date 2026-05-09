@@ -98,7 +98,15 @@ class ResponseEngine:
             })
 
         # Ejecutar respuestas
-        if action == "BLOCK":
+        if not playbook:
+            playbook = {
+                "immediate": "BLOCK_PROMPT",
+                "containment": "FLAG_SESSION",
+                "remediation": "Revisar actividad sospechosa",
+                "escalation": "ALERT_MEDIUM",
+                "auto_resolve": True,
+            }
+        if action in ("BLOCK", "WARN"):
             responses_taken.append({
                 "action": playbook.get("immediate", "BLOCK_PROMPT"),
                 "target": f"prompt:{event_id}",
