@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Request
+﻿from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -7,6 +7,16 @@ from fastapi.security import HTTPBearer
 import json
 import uuid
 from datetime import datetime
+import logging
+import sys
+import time
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("centinela")
 from core.pipeline.event_pipeline import EventPipeline
 from core.engines.risk_engine import RiskEngine
 from core.engines.threat_correlation import ThreatCorrelationEngine
@@ -25,7 +35,7 @@ from core.auth import (
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="CENTINELA Core Intelligence Engine",
-    description="AI Runtime Security Platform — Core Backend",
+    description="AI Runtime Security Platform â€” Core Backend",
     version="2.0.0"
 )
 
@@ -39,7 +49,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Initialize Core Engines ──────────────────────────────────────────
+# â”€â”€ Initialize Core Engines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 threat_memory = ThreatMemory()
 risk_engine = RiskEngine(threat_memory)
 correlation_engine = ThreatCorrelationEngine(threat_memory)
@@ -54,9 +64,9 @@ pipeline = EventPipeline(risk_engine, correlation_engine, threat_memory)
 async def startup():
     init_db()
     init_default_admin()
-    print("CENTINELA Core v2.0 — All engines online")
+    print("CENTINELA Core v2.0 â€” All engines online")
 
-# ── WebSocket Manager ─────────────────────────────────────────────────
+# â”€â”€ WebSocket Manager â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class ConnectionManager:
     def __init__(self):
         self.active: list[WebSocket] = []
@@ -78,8 +88,10 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# ── Full Pipeline ─────────────────────────────────────────────────────
+# â”€â”€ Full Pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async def process_full_pipeline(event: dict) -> dict:
+    t0 = time.time()
+    logger.info(f"PIPELINE START | agent={event.get('agent')} user={event.get('user')} id={event.get('id','')[:8]}")
     result = await pipeline.process(event)
     content = event.get("content", "")
     detection = result.get("detection", threat_detection.analyze(content, {
@@ -106,13 +118,18 @@ async def process_full_pipeline(event: dict) -> dict:
         "agent_status": agent_analysis.get("status"),
     }
     save_event(enriched)
+    elapsed = round((time.time()-t0)*1000)
+    threat = detection.get("threat_detected", False)
+    action = enriched.get("policy", {}).get("action", "?")
+    logger.info(f"PIPELINE END | agent={event.get('agent')} threat={threat} action={action} risk={enriched.get('risk',{}).get('score',0)} ms={elapsed}")
     if detection.get("threat_detected"):
         incident = result.get("incident")
         if incident:
             save_incident(incident)
+            logger.warning(f"INCIDENT CREATED | id={incident.get('id')} agent={incident.get('agent')} severity={incident.get('severity')} risk={incident.get('risk_score')}")
     return enriched
 
-# ── Auth Routes ───────────────────────────────────────────────────────
+# â”€â”€ Auth Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/v1/auth/login")
 async def login(payload: dict):
     username = payload.get("username")
@@ -157,7 +174,7 @@ async def me(current_user=Depends(get_current_user)):
         "created_at": current_user.created_at,
     }
 
-# ── WebSocket ─────────────────────────────────────────────────────────
+# â”€â”€ WebSocket â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -170,7 +187,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-# ── Protected Routes ──────────────────────────────────────────────────
+# â”€â”€ Protected Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/v1/event")
 async def ingest_event(event: dict, current_user=Depends(get_current_user)):
     result = await process_full_pipeline(event)
@@ -284,7 +301,7 @@ async def get_agent_anomalies(current_user=Depends(get_current_user)):
 async def get_db_stats(current_user=Depends(get_current_user)):
     return get_stats()
 
-# ── Health (público) ──────────────────────────────────────────────────
+# â”€â”€ Health (pÃºblico) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/v1/admin/reset")
 async def reset_admin():
     from core.database import SessionLocal
