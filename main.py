@@ -372,3 +372,14 @@ if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
     
 
+
+@app.get("/api/v1/admin/diag-policy")
+async def diag_policy(current_user=Depends(get_admin_user)):
+    from core.database import SessionLocal, EventModel
+    db = SessionLocal()
+    try:
+        from sqlalchemy import func
+        rows = db.query(EventModel.policy_action, func.count(EventModel.id)).group_by(EventModel.policy_action).all()
+        return {"policy_action_counts": {r[0]: r[1] for r in rows}}
+    finally:
+        db.close()
