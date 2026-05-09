@@ -120,7 +120,7 @@ def get_stats() -> dict:
     try:
         total = db.query(func.count(EventModel.id)).scalar() or 0
         threats = db.query(func.count(EventModel.id)).filter(EventModel.threat_detected == True).scalar() or 0
-        blocked = db.query(func.count(EventModel.id)).filter(EventModel.policy_action == "BLOCK").scalar() or 0
+        blocked = db.query(func.count(EventModel.id)).filter(EventModel.policy_action.in_(["BLOCK", "RESTRICT"])).scalar() or 0
         incidents = db.query(func.count(IncidentModel.id)).scalar() or 0
         return {
             "total_events": total,
