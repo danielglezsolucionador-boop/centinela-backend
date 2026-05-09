@@ -303,7 +303,7 @@ async def get_db_stats(current_user=Depends(get_current_user)):
 
 # â”€â”€ Health (pÃºblico) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/v1/admin/reset")
-async def reset_admin():
+async def reset_admin(current_user=Depends(get_admin_user)):
     from core.database import SessionLocal
     from core.auth import UserModel, create_user
     db = SessionLocal()
@@ -315,7 +315,7 @@ async def reset_admin():
     create_user("daniel", "daniel.glez.solucionador@gmail.com", "Centinela24", is_admin=True)
     return {"status": "admin reset ok"}
 @app.post("/api/v1/admin/migrate")
-async def run_migration():
+async def run_migration(current_user=Depends(get_admin_user)):
     from core.database import engine
     from sqlalchemy import text
     try:
@@ -326,7 +326,7 @@ async def run_migration():
     except Exception as e:
         return {"status": "already done", "detail": str(e)}
 @app.get("/api/v1/admin/db-columns")
-async def get_db_columns():
+async def get_db_columns(current_user=Depends(get_admin_user)):
     from core.database import engine
     from sqlalchemy import text
     with engine.connect() as conn:
