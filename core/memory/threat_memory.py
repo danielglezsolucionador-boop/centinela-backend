@@ -33,7 +33,7 @@ class ThreatMemory:
                 id=event.get("id", str(uuid.uuid4())),
                 timestamp=datetime.fromisoformat(event.get("timestamp", datetime.utcnow().isoformat())),
                 agent=agent,
-                user=user,
+                user_id=user,
                 model=event.get("model", "unknown"),
                 content=event.get("content", "")[:2000],
                 risk_score=event.get("risk", {}).get("score", 0),
