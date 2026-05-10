@@ -244,7 +244,12 @@ async def get_incidents(current_user=Depends(get_current_user)):
         result = []
         for r in records:
             try:
-                threat_types = json.loads(r.threat_types) if r.threat_types and r.threat_types.strip() else []
+                if not r.threat_types or not r.threat_types.strip():
+                    threat_types = []
+                elif r.threat_types.startswith("["):
+                    threat_types = json.loads(r.threat_types)
+                else:
+                    threat_types = [t.strip() for t in r.threat_types.split(",") if t.strip()]
             except:
                 threat_types = []
             result.append({
