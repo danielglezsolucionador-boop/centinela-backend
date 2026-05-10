@@ -389,19 +389,3 @@ if __name__ == "__main__":
 
 
 
-@app.post('/api/v1/admin/emergency-reset')
-async def emergency_reset():
-    from core.database import SessionLocal
-    from core.auth import UserModel
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
-    db = SessionLocal()
-    try:
-        user = db.query(UserModel).filter(UserModel.username == 'daniel').first()
-        if user:
-            user.hashed_password = pwd_context.hash('centinela24')
-            db.commit()
-            return {'status': 'ok'}
-        return {'status': 'not found'}
-    finally:
-        db.close()
