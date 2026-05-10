@@ -273,7 +273,24 @@ async def get_incidents(current_user=Depends(get_current_user)):
 
 @app.get("/api/v1/detection/stats")
 async def get_detection_stats(current_user=Depends(get_current_user)):
-    return threat_detection.get_stats()
+    db = SessionLocal()
+    try:
+        from sqlalchemy import func
+        total = db.query(func.count(EventModel.id)).scalar() or 0
+        detected = db.query(func.count(EventModel.id)).filter(EventModel.threat_detected == True).scalar() or 0
+        by_type_raw = db.query(EventModel.threat_types).filter(EventModel.threat_detected == True).all()
+        by_type = {}
+        for row in by_type_raw:
+            if row[0]:
+                for t in row[0].split(","):
+                    t = t.strip()
+                    if t: by_type[t] = by_type.get(t, 0) + 1
+        all_types = ["PROMPT_INJECTION","JAILBREAK","DATA_EXFILTRATION","SYSTEM_EXTRACTION","ROLE_MANIPULATION","PII_LEAKAGE","TOOL_ABUSE"]
+        return {"total_analyzed": total, "threats_detected": detected, "by_type": {t: by_type.get(t, 0) for t in all_types}, "detection_rate": round(detected / total * 100, 2) if total > 0 else 0}
+    except Exception as e:
+        return threat_detection.get_stats()
+    finally:
+        db.close()
 
 @app.get("/api/v1/policy/all")
 async def get_all_policies(current_user=Depends(get_current_user)):
