@@ -3,7 +3,9 @@ import uuid
 import json
 from datetime import datetime, timedelta
 from collections import defaultdict
+import logging
 from core.database import SessionLocal, EventModel, IncidentModel, ThreatPatternModel, init_db
+logger = logging.getLogger("centinela")
 
 init_db()
 
@@ -191,6 +193,24 @@ class ThreatMemory:
         })
         if len(self.threat_patterns) > 5000:
             self.threat_patterns = self.threat_patterns[-2500:]
+
+    def hydrate_from_db(self):
+        db = SessionLocal()
+        try:
+            rows = db.query(EventModel).order_by(EventModel.timestamp.desc()).limit(200).all()
+            for r in rows:
+                agent = r.agent or "unknown"
+                user = r.user_id or "unknown"
+                if agent not in self._agent_cache:
+                    self._agent_cache[agent] = []
+                if user not in self._user_cache:
+                    self._user_cache[user] = []
+            logger.info(f"HYDRATION COMPLETE | agents={len(self._agent_cache)} users={len(self._user_cache)}")
+        except Exception as e:
+            logger.warning(f"HYDRATION ERROR: {e}")
+        finally:
+            db.close()
+
     def _fingerprint(self, event: dict) -> str:
         content = event.get("content", "")
         threat_types = ",".join(sorted(event.get("detection", {}).get("threat_types", [])))

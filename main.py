@@ -55,6 +55,7 @@ app.add_middleware(
 
 # â”€â”€ Initialize Core Engines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 threat_memory = ThreatMemory()
+threat_memory.hydrate_from_db()
 risk_engine = RiskEngine(threat_memory)
 correlation_engine = ThreatCorrelationEngine(threat_memory)
 threat_detection = ThreatDetectionEngine(threat_memory)
