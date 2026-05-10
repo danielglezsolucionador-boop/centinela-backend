@@ -1,10 +1,10 @@
-Ôªø# CENTINELA ‚Äî Arquitectura Real Operacional
+# CENTINELA ó Arquitectura Real Operacional
 # Fecha: Mayo 2026
 
 ## STACK
 
 - Backend: Python 3.14 + FastAPI + SQLAlchemy
-- Deploy: Render (plan gratuito ‚Äî se duerme 15min inactividad)
+- Deploy: Render (plan gratuito ó se duerme 15min inactividad)
 - DB: PostgreSQL 18 en Render (expira Mayo 31, 2026)
 - Frontend: Next.js 14 + TypeScript + Tailwind
 - Deploy Frontend: Vercel
@@ -20,7 +20,7 @@
 
 ## CREDENCIALES
 
-- Admin: daniel / Centinela24
+- Admin: daniel / centinela24
 - DB: variable DATABASE_URL en Render Environment
 
 ## FLUJO RUNTIME REAL
@@ -31,7 +31,7 @@ PLUMA --> sendPromptToCentinela() --> POST /api/v1/prompt/analyze
           --> RiskEngine.score()
           --> ThreatCorrelationEngine.correlate()
           --> ThreatMemory.store() [RAM]
-      --> ThreatDetectionEngine.analyze() [regex + heur√≠sticas]
+      --> ThreatDetectionEngine.analyze() [regex + heurÌsticas]
       --> PolicyEngine.evaluate()
       --> ResponseEngine.respond()
       --> ObservabilityEngine.record_trace()
@@ -43,11 +43,11 @@ PLUMA --> sendPromptToCentinela() --> POST /api/v1/prompt/analyze
 ## MOTORES ACTIVOS
 
 - ThreatDetectionEngine: regex + scoring. Detecta PROMPT_INJECTION, JAILBREAK, DATA_EXFILTRATION, SYSTEM_EXTRACTION, ROLE_MANIPULATION
-- PolicyEngine: pol√≠ticas por agente. Acciones: BLOCK, RESTRICT, WARN, ALLOW
-- RiskEngine: score din√°mico 0-100 por agente y modelo
+- PolicyEngine: polÌticas por agente. Acciones: BLOCK, RESTRICT, WARN, ALLOW
+- RiskEngine: score din·mico 0-100 por agente y modelo
 - ResponseEngine: playbooks por tipo de amenaza. Acciones: BLOCK_PROMPT, ISOLATE_AGENT, ALERT
-- ThreatCorrelationEngine: correlaci√≥n cross-agent en RAM
-- ObservabilityEngine: trazas y m√©tricas en RAM
+- ThreatCorrelationEngine: correlaciÛn cross-agent en RAM
+- ObservabilityEngine: trazas y mÈtricas en RAM
 - AgentSecurityEngine: behavioral drift detection en RAM
 - ThreatMemory: cache RAM + persistencia PostgreSQL
 
@@ -60,7 +60,7 @@ PLUMA --> sendPromptToCentinela() --> POST /api/v1/prompt/analyze
 
 ## ENDPOINTS PRINCIPALES
 
-P√∫blicos:
+P˙blicos:
 - GET /api/v1/health
 - POST /api/v1/auth/login
 
@@ -97,21 +97,21 @@ Protegidos JWT Admin:
 - CORS: restringido a dominios oficiales
 - Admin endpoints: protegidos con JWT
 
-## DEPENDENCIAS CR√çTICAS
+## DEPENDENCIAS CRÕTICAS
 
-- PostgreSQL Render: expira Mayo 31, 2026 ‚Äî MIGRAR URGENTE
+- PostgreSQL Render: expira Mayo 31, 2026 ó MIGRAR URGENTE
 - Render plan gratis: cold start 50s tras 15min inactividad
 - ThreatMemory RAM: se pierde en cada restart
 
 ## RIESGOS ACTUALES
 
-1. PostgreSQL expira Mayo 31 ‚Äî cr√≠tico
-2. ThreatMemory en RAM ‚Äî contexto operacional se pierde en restart
-3. Render plan gratis ‚Äî cold start afecta UX
-4. No hay alertas autom√°ticas externas (Sentry, PagerDuty)
-5. No hay backups autom√°ticos de DB
+1. PostgreSQL expira Mayo 31 ó crÌtico
+2. ThreatMemory en RAM ó contexto operacional se pierde en restart
+3. Render plan gratis ó cold start afecta UX
+4. No hay alertas autom·ticas externas (Sentry, PagerDuty)
+5. No hay backups autom·ticos de DB
 
-## CHECKLIST PRODUCCI√ìN
+## CHECKLIST PRODUCCI”N
 
 [x] Auth JWT funcionando
 [x] Rate limiting activo
@@ -124,6 +124,6 @@ Protegidos JWT Admin:
 [x] Frontend conectado a datos reales
 [ ] PostgreSQL migrado a plan pagado
 [ ] ThreatMemory persistida fuera de RAM
-[ ] Backups autom√°ticos DB
+[ ] Backups autom·ticos DB
 [ ] Alertas externas (Sentry)
 [ ] CORS allow_methods restringido
