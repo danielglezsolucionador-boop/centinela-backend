@@ -146,7 +146,8 @@ async def process_full_pipeline(event: dict) -> dict:
 
 # â”€â”€ Auth Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/v1/auth/login")
-async def login(payload: dict):
+@limiter.limit("5/minute")
+async def login(request: Request, payload: dict):
     username = payload.get("username")
     password = payload.get("password")
     if not username or not password:
