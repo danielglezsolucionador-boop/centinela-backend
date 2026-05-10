@@ -127,10 +127,20 @@ async def process_full_pipeline(event: dict) -> dict:
     action = enriched.get("policy", {}).get("action", "?")
     logger.info(f"PIPELINE END | agent={event.get('agent')} threat={threat} action={action} risk={enriched.get('risk',{}).get('score',0)} ms={elapsed}")
     if detection.get("threat_detected"):
-        incident = result.get("incident")
-        if incident:
-            save_incident(incident)
-            logger.warning(f"INCIDENT CREATED | id={incident.get('id')} agent={incident.get('agent')} severity={incident.get('severity')} risk={incident.get('risk_score')}")
+        incident = result.get("incident") or {}
+        incident_to_save = {
+            "id": incident.get("id") or f"INC-{str(uuid.uuid4())[:6].upper()}",
+            "severity": incident.get("severity") or risk.get("level", "MEDIUM"),
+            "agent": event.get("agent"),
+            "user": event.get("user"),
+            "risk_score": risk.get("score", 0),
+            "threat_types": detection.get("threat_types", []),
+            "policy_action": policy.get("action", "BLOCK"),
+            "status": "OPEN",
+            "event_id": event.get("id"),
+        }
+        save_incident(incident_to_save)
+        logger.warning(f"INCIDENT CREATED | id={incident_to_save['id']} agent={incident_to_save['agent']} severity={incident_to_save['severity']} risk={incident_to_save['risk_score']}")
     return enriched
 
 # â”€â”€ Auth Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
