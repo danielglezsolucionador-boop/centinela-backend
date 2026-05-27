@@ -1,5 +1,6 @@
 .env
 .env.*
+OPERATIONAL_PROVENANCE.json
 *.db
 backup_*.json
 __pycache__/

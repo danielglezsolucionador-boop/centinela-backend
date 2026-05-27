@@ -33,11 +33,36 @@ from core.auth import (
     create_access_token, verify_password, create_user, get_user
 )
 
+RUNTIME_VERSION = "2.0.0"
+PROVENANCE_BRANCH = os.environ.get("RENDER_GIT_BRANCH", "main")
+PROVENANCE_COMMIT = (
+    os.environ.get("RENDER_GIT_COMMIT")
+    or os.environ.get("GIT_COMMIT")
+    or "792d38e3ea7ff6b3eeb684e3c0d683b3ad0d9aaa"
+)
+PROVENANCE_BUILD_TIMESTAMP = os.environ.get("BUILD_TIMESTAMP", "2026-05-27T06:09:24-05:00")
+PROVENANCE_DEPLOYMENT_TARGET = os.environ.get(
+    "DEPLOYMENT_TARGET",
+    "Render backend: https://centinela-backend-kzwk.onrender.com",
+)
+PROVENANCE_PHASE_STATUS = "Phase 2.3 provenance visible; no secrets or local paths exposed"
+
+def public_provenance() -> dict:
+    return {
+        "app_name": "CENTINELA Backend",
+        "runtime_version": RUNTIME_VERSION,
+        "repo_branch": PROVENANCE_BRANCH,
+        "current_commit": PROVENANCE_COMMIT,
+        "build_timestamp": PROVENANCE_BUILD_TIMESTAMP,
+        "deployment_target": PROVENANCE_DEPLOYMENT_TARGET,
+        "phase_status": PROVENANCE_PHASE_STATUS,
+    }
+
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="CENTINELA Core Intelligence Engine",
     description="AI Runtime Security Platform â€” Core Backend",
-    version="2.0.0"
+    version=RUNTIME_VERSION
 )
 
 app.state.limiter = limiter
@@ -390,8 +415,10 @@ async def health():
     return {
         "status": "OPERATIONAL",
         "engine": "CENTINELA Core v2.0",
+        "runtime_version": RUNTIME_VERSION,
         "timestamp": datetime.utcnow().isoformat(),
         "database": "CONNECTED" if db_stats else "RAM_ONLY",
+        "provenance": public_provenance(),
         "engines": {
             "pipeline": "ONLINE",
             "risk_engine": "ONLINE",
@@ -405,6 +432,10 @@ async def health():
             "postgresql": "ONLINE" if db_stats else "PENDING",
         }
     }
+
+@app.get("/api/v1/provenance")
+async def provenance():
+    return public_provenance()
 @app.post("/api/v1/admin/reset-db")
 async def reset_db(request: Request, current_user=Depends(get_current_user)):
     body = await request.json()
