@@ -1,4 +1,4 @@
-import os
+﻿import os
 import uuid
 import bcrypt as _bcrypt
 from datetime import datetime, timedelta
@@ -9,14 +9,18 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import Column, String, Boolean, DateTime
 from core.database import Base, SessionLocal, engine
 
-# ── Config ────────────────────────────────────────────────────────────
-SECRET_KEY = os.environ.get("SECRET_KEY", "centinela-secret-key-change-in-production")
+# â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    if os.environ.get("ENVIRONMENT") == "production":
+        raise RuntimeError("SECRET_KEY must be configured in production")
+    SECRET_KEY = "centinela-local-dev-secret-change-me"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
-# ── User Model ────────────────────────────────────────────────────────
+# â”€â”€ User Model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class UserModel(Base):
     __tablename__ = "users"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -29,7 +33,7 @@ class UserModel(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# ── Helpers ───────────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def hash_password(password: str) -> str:
     return _bcrypt.hashpw(password[:72].encode(), _bcrypt.gensalt()).decode()
 
@@ -69,7 +73,7 @@ def create_user(username: str, email: str, password: str, is_admin: bool = False
     finally:
         db.close()
 
-# ── Auth dependency ───────────────────────────────────────────────────
+# â”€â”€ Auth dependency â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -95,14 +99,18 @@ async def get_admin_user(current_user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
-# ── Create default admin on startup ──────────────────────────────────
+# â”€â”€ Create default admin on startup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def init_default_admin():
     admin_username = os.environ.get("ADMIN_USERNAME", "daniel")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "Centinela24")
-    admin_email = os.environ.get("ADMIN_EMAIL", "daniel.glez.solucionador@gmail.com")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@centinela.local")
+    if not admin_password:
+        if os.environ.get("ENVIRONMENT") == "production":
+            raise RuntimeError("ADMIN_PASSWORD must be configured in production")
+        admin_password = "centinela-local-dev-password-change-me"
     existing = get_user(admin_username)
     if not existing:
         create_user(admin_username, admin_email, admin_password, is_admin=True)
-        print(f"✅ Admin user created: {admin_username}")
+        print(f"OK Admin user created: {admin_username}")
     else:
-        print(f"✅ Admin user exists: {admin_username}")
+        print(f"OK Admin user exists: {admin_username}")

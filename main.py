@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 import sys
 import time
+import os
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,13 +42,21 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+cors_origins = [
+    "https://centinela-alpha.vercel.app",
+    "https://centinela-btdd.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
+extra_cors_origins = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://centinela-btdd.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
+    allow_origins=sorted(set(cors_origins + extra_cors_origins)),
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
@@ -344,14 +353,19 @@ async def get_db_stats(current_user=Depends(get_current_user)):
 async def reset_admin(current_user=Depends(get_admin_user)):
     from core.database import SessionLocal
     from core.auth import UserModel, create_user
+    admin_username = os.environ.get("ADMIN_USERNAME", "daniel")
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@centinela.local")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+    if not admin_password:
+        raise HTTPException(status_code=503, detail="ADMIN_PASSWORD must be configured before admin reset")
     db = SessionLocal()
     try:
-        db.query(UserModel).filter(UserModel.username == "daniel").delete()
+        db.query(UserModel).filter(UserModel.username == admin_username).delete()
         db.commit()
     finally:
         db.close()
-    create_user("daniel", "daniel.glez.solucionador@gmail.com", "Centinela24", is_admin=True)
-    return {"status": "admin reset ok"}
+    create_user(admin_username, admin_email, admin_password, is_admin=True)
+    return {"status": "admin reset ok", "username": admin_username}
 @app.post("/api/v1/admin/migrate")
 async def run_migration(current_user=Depends(get_admin_user)):
     from core.database import engine
