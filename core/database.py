@@ -1,9 +1,9 @@
 import os
 import json
-from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean, Text, DateTime, func
+from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean, Text, DateTime, func, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+from datetime import datetime, timedelta
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./centinela.db")
 if DATABASE_URL.startswith("postgres://"):
@@ -51,8 +51,48 @@ class ThreatPatternModel(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     count = Column(Integer, default=1)
 
+class NormalizedEventModel(Base):
+    __tablename__ = "normalized_events"
+    event_id = Column(String, primary_key=True)
+    timestamp = Column(DateTime, index=True, default=datetime.utcnow)
+    source = Column(String, index=True)
+    severity = Column(String, index=True)
+    category = Column(String, index=True)
+    confidence = Column(String)
+    classification = Column(String, index=True)
+    signal_state = Column(String, index=True)
+    origin_agent = Column(String, index=True)
+    origin_user = Column(String, index=True)
+    operational_impact = Column(Text)
+    security_impact = Column(Text)
+    raw = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    ensure_schema_compatibility()
+
+def ensure_schema_compatibility():
+    """Apply small idempotent migrations for pre-Phase schemas."""
+    _ensure_events_user_id_column()
+
+def _ensure_events_user_id_column():
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        table_names = inspector.get_table_names()
+        if "events" not in table_names:
+            return
+
+        columns = {column["name"] for column in inspector.get_columns("events")}
+        if "user_id" in columns:
+            return
+
+        if "user" in columns:
+            conn.execute(text('ALTER TABLE events RENAME COLUMN "user" TO user_id'))
+        else:
+            conn.execute(text("ALTER TABLE events ADD COLUMN user_id VARCHAR"))
+
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_events_user_id ON events (user_id)"))
 
 def get_db():
     db = SessionLocal()
@@ -89,6 +129,79 @@ def save_event(event: dict):
     finally:
         db.close()
 
+def save_normalized_event(normalized: dict):
+    if not isinstance(normalized, dict):
+        return
+    event_id = normalized.get("event_id")
+    if not event_id or event_id == "unknown":
+        return
+    db = SessionLocal()
+    try:
+        existing = db.query(NormalizedEventModel).filter(NormalizedEventModel.event_id == event_id).first()
+        if existing:
+            return
+        origin = normalized.get("origin") if isinstance(normalized.get("origin"), dict) else {}
+        record = NormalizedEventModel(
+            event_id=event_id,
+            timestamp=_parse_datetime(normalized.get("timestamp")),
+            source=normalized.get("source", "unknown"),
+            severity=normalized.get("severity", "LOW"),
+            category=normalized.get("category", "OPERATIONAL_EVENT"),
+            confidence=normalized.get("confidence", "UNKNOWN"),
+            classification=normalized.get("classification", "DEGRADED"),
+            signal_state=normalized.get("signal_state", "low_confidence"),
+            origin_agent=origin.get("agent", "unknown"),
+            origin_user=origin.get("user", "unknown"),
+            operational_impact=normalized.get("operational_impact", ""),
+            security_impact=normalized.get("security_impact", ""),
+            raw=json.dumps(normalized)[:12000],
+        )
+        db.add(record)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"save_normalized_event error: {e}")
+    finally:
+        db.close()
+
+def delete_old_normalized_events(retention_days: int = 30):
+    db = SessionLocal()
+    try:
+        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        deleted = db.query(NormalizedEventModel).filter(NormalizedEventModel.timestamp < cutoff).delete()
+        db.commit()
+        return deleted
+    except Exception as e:
+        db.rollback()
+        print(f"delete_old_normalized_events error: {e}")
+        return 0
+    finally:
+        db.close()
+
+def normalized_event_to_dict(row: NormalizedEventModel) -> dict:
+    raw = _parse_json(row.raw)
+    if isinstance(raw, dict):
+        return raw
+    return {
+        "event_id": row.event_id,
+        "source": row.source,
+        "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+        "severity": row.severity,
+        "category": row.category,
+        "confidence": row.confidence,
+        "origin": {
+            "agent": row.origin_agent,
+            "user": row.origin_user,
+            "model": "unknown",
+            "session_id": "unknown",
+        },
+        "operational_impact": row.operational_impact,
+        "security_impact": row.security_impact,
+        "classification": row.classification,
+        "signal_state": row.signal_state,
+        "evidence_basis": ["persisted_normalized_event"],
+    }
+
 def save_incident(incident: dict):
     db = SessionLocal()
     try:
@@ -114,6 +227,24 @@ def save_incident(incident: dict):
         print(f"save_incident error: {e}")
     finally:
         db.close()
+
+def _parse_datetime(value):
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            return datetime.utcnow()
+    return datetime.utcnow()
+
+def _parse_json(value):
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return None
 
 def get_stats() -> dict:
     db = SessionLocal()

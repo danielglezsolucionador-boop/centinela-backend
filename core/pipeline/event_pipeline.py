@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from core.engines.threat_detection import ThreatDetectionEngine
+from core.intelligence.operational_intelligence import OperationalIntelligenceFoundation
 
 
 class EventPipeline:
@@ -9,6 +10,7 @@ class EventPipeline:
         self.correlation_engine = correlation_engine
         self.threat_memory = threat_memory
         self.threat_engine = ThreatDetectionEngine(threat_memory)
+        self.operational_intelligence = OperationalIntelligenceFoundation()
 
     async def process(self, raw_event: dict) -> dict:
         event = self._normalize(raw_event)
@@ -20,6 +22,7 @@ class EventPipeline:
         event["correlation"] = correlation
         policy = self._enforce_policy(event)
         event["policy"] = policy
+        event["operational_intelligence"] = self.operational_intelligence.normalize_event(event)
         response = self._respond(event)
         event["response"] = response
         self.threat_memory.store(event)
