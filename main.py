@@ -54,11 +54,24 @@ from core.auth import (
 )
 
 RUNTIME_VERSION = "2.0.0"
-PROVENANCE_BRANCH = os.environ.get("RENDER_GIT_BRANCH", "main")
+
+def _local_git_value(args: list[str], fallback: str) -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", os.path.dirname(__file__), *args],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        ).strip() or fallback
+    except Exception:
+        return fallback
+
+PROVENANCE_BRANCH = os.environ.get("RENDER_GIT_BRANCH") or _local_git_value(["branch", "--show-current"], "main")
 PROVENANCE_COMMIT = (
     os.environ.get("RENDER_GIT_COMMIT")
     or os.environ.get("GIT_COMMIT")
-    or "792d38e3ea7ff6b3eeb684e3c0d683b3ad0d9aaa"
+    or _local_git_value(["rev-parse", "HEAD"], "unknown")
 )
 PROVENANCE_BUILD_TIMESTAMP = os.environ.get("BUILD_TIMESTAMP", "2026-05-27T06:09:24-05:00")
 PROVENANCE_DEPLOYMENT_TARGET = os.environ.get(
