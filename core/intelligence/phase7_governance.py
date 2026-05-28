@@ -128,15 +128,16 @@ class PhaseSevenGovernance:
         dirty_count = self._dirty_count(release_evidence)
         backend_match = source_live.get("backend_commit_matches_runtime")
         frontend_match = source_live.get("frontend_commit_matches_runtime")
+        source_live_state = source_live.get("state", "UNKNOWN")
         rollback_confidence = phase4.get("rollback", {}).get("rollback_confidence", "UNKNOWN")
 
         if not runtime_commit:
             classification = "UNKNOWN"
         elif dirty_count > 0:
             classification = "DEGRADED_RELEASE"
-        elif backend_match is True and frontend_match is True and rollback_confidence in {"MEDIUM", "HIGH"}:
+        elif source_live_state == "SOURCE_LIVE_MATCH_VERIFIED" and rollback_confidence in {"MEDIUM", "HIGH"}:
             classification = "TRUSTED"
-        elif backend_match is False or frontend_match is False:
+        elif source_live_state == "SOURCE_LIVE_MISMATCH":
             classification = "UNTRUSTED"
         else:
             classification = "CONDITIONALLY_TRUSTED"

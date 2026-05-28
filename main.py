@@ -777,10 +777,10 @@ def _git_source_state(label: str, path: str) -> dict:
             "branch": "UNKNOWN",
             "commit": "UNKNOWN",
             "short_commit": "unknown",
-            "dirty": True,
-            "change_count": 1,
-            "deploy_relevant_dirty": True,
-            "deploy_relevant_change_count": 1,
+            "dirty": False,
+            "change_count": 0,
+            "deploy_relevant_dirty": False,
+            "deploy_relevant_change_count": 0,
             "remote_visible": False,
             "remote_kind": "UNKNOWN",
             "status_state": "UNAVAILABLE",
@@ -811,15 +811,20 @@ def _release_evidence_payload() -> dict:
     backend = _git_source_state("backend", backend_source)
     provenance = public_provenance()
     runtime_commit = provenance.get("current_commit")
-    backend_match = bool(runtime_commit and backend.get("commit") == runtime_commit)
-    frontend_match = False
+    backend_commit = backend.get("commit")
+    backend_match = None
+    if runtime_commit and backend_commit and backend_commit != "UNKNOWN":
+        backend_match = backend_commit == runtime_commit
+    frontend_match = None
     dirty_count = int(frontend.get("deploy_relevant_change_count", 0) or 0) + int(backend.get("deploy_relevant_change_count", 0) or 0)
 
     if not runtime_commit:
         source_live_state = "UNKNOWN"
     elif dirty_count > 0:
         source_live_state = "LOCAL_CHANGES_NOT_DEPLOYED"
-    elif backend_match and frontend_match:
+    elif backend_match is False:
+        source_live_state = "SOURCE_LIVE_MISMATCH"
+    elif backend_match is True and frontend_match is True:
         source_live_state = "SOURCE_LIVE_MATCH_VERIFIED"
     else:
         source_live_state = "PARTIAL_TRACEABILITY"
