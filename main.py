@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import sys
 import time
@@ -37,6 +37,10 @@ from core.intelligence.phase7_governance import PhaseSevenGovernance
 from core.memory.threat_memory import ThreatMemory
 from core.database import (
     NormalizedEventModel,
+    HumanReviewRequestModel,
+    HumanReviewAuditEventModel,
+    SentinelaClientSecuritySummaryModel,
+    SentinelaPricingPlanModel,
     delete_old_normalized_events,
     init_db,
     normalized_event_to_dict,
@@ -906,6 +910,668 @@ async def get_phase7_final_certification(current_user=Depends(get_current_user))
 @app.get("/api/v1/governance/phase7-summary")
 async def get_phase7_summary(current_user=Depends(get_current_user)):
     return _phase7_summary_payload()
+
+SEVERITY_WEIGHT = {
+    "critical": 5,
+    "high": 4,
+    "medium": 3,
+    "low": 2,
+    "info": 1,
+}
+
+BLOCKED_HUMAN_ACTION_TYPES = {
+    "delete_data",
+    "offensive_action",
+    "attack_system",
+    "exploit_vulnerability",
+    "touch_real_cloud",
+    "automatic_production_change",
+    "rotate_real_secrets",
+    "automatic_deploy",
+    "delete_user",
+    "mass_email",
+    "irreversible_action",
+    "reveal_protected_source",
+}
+
+BLOCKED_ACTION_MESSAGE = (
+    "Acción no permitida en esta versión. Requiere autorización superior "
+    "y política explícita."
+)
+
+def _json_loads(value, fallback):
+    if not value:
+        return fallback
+    try:
+        return json.loads(value)
+    except Exception:
+        return fallback
+
+def _safe_source_agent(value: str | None) -> str:
+    normalized = str(value or "Motor de riesgo").strip()
+    if normalized.lower() in {"sombra", "fuente sombra", "entidad sombra", "cabina sombra"}:
+        return "Inteligencia de amenazas"
+    return normalized
+
+def _is_sensitive_human_action(action_type: str | None, proposed_action: str | None) -> bool:
+    action = str(action_type or "").lower().strip()
+    proposed = str(proposed_action or "").lower()
+    if action in BLOCKED_HUMAN_ACTION_TYPES:
+        return True
+    blocked_terms = (
+        "borrar datos",
+        "atacar",
+        "explotar vulnerabilidad",
+        "deploy automático",
+        "rotar secretos",
+        "eliminar usuarios",
+        "correo masivo",
+        "acción irreversible",
+        "fuente protegida",
+    )
+    return any(term in proposed for term in blocked_terms)
+
+def _human_cabin_seed_records():
+    now = datetime.utcnow()
+    return [
+        {
+            "id": "HC-CRIT-001",
+            "title": "Riesgo crítico cliente: bloqueo defensivo pendiente",
+            "description": "Se detectó una señal de exfiltración simulada en ambiente local/demo. No se afirma incidente real.",
+            "severity": "critical",
+            "status": "pending_review",
+            "proposed_action": "Congelar la ruta afectada y pedir más evidencia antes de cualquier cambio real.",
+            "action_type": "containment_review",
+            "source_agent": "Motor de riesgo",
+            "target_system": "API Gateway demo",
+            "client_name": "Cliente Norte Demo",
+            "risk_score": 94,
+            "confidence_score": 0.84,
+            "evidence_json": {
+                "data_state": "DEMO_LOCAL",
+                "origin": "Inteligencia de amenazas",
+                "signals": ["policy_gate", "anomaly_pattern", "missing_context"],
+                "visible_to_client": True,
+            },
+            "recommended_decision": "Pedir evidencia adicional y mantener contención reversible.",
+            "metadata_json": {"demo_local": True, "protection_claim": "not_real_runtime"},
+            "created_at": now,
+        },
+        {
+            "id": "HC-HIGH-001",
+            "title": "Permiso sensible en agente interno",
+            "description": "Una capacidad de escritura debe quedar bajo revisión humana antes de uso prolongado.",
+            "severity": "high",
+            "status": "pending_review",
+            "proposed_action": "Pausar ejecución y solicitar revisión de permisos.",
+            "action_type": "pause_sensitive_permission",
+            "source_agent": "Análisis interno",
+            "target_system": "Agente operativo demo",
+            "client_name": "Cliente Sur Demo",
+            "risk_score": 82,
+            "confidence_score": 0.76,
+            "evidence_json": {"data_state": "DEMO_LOCAL", "origin": "Análisis interno", "visible_to_client": True},
+            "recommended_decision": "Pausar hasta completar evidencia técnica.",
+            "metadata_json": {"demo_local": True},
+            "created_at": now,
+        },
+        {
+            "id": "HC-HIGH-002",
+            "title": "Cambio de política requiere confirmación",
+            "description": "La política podría reducir protección si se aplica sin auditoría.",
+            "severity": "high",
+            "status": "escalated",
+            "proposed_action": "Escalar para decisión interna antes de cambiar reglas.",
+            "action_type": "policy_escalation",
+            "source_agent": "Motor de política",
+            "target_system": "Policy Engine demo",
+            "client_name": "Cliente Norte Demo",
+            "risk_score": 79,
+            "confidence_score": 0.7,
+            "evidence_json": {"data_state": "DEMO_LOCAL", "origin": "Motor de política", "visible_to_client": False},
+            "recommended_decision": "Mantener regla actual y pedir auditoría.",
+            "metadata_json": {"demo_local": True},
+            "created_at": now,
+        },
+        {
+            "id": "HC-MED-001",
+            "title": "Evidencia incompleta en alerta de prompt",
+            "description": "La alerta tiene señales parciales y no debe presentarse como certeza.",
+            "severity": "medium",
+            "status": "needs_more_evidence",
+            "proposed_action": "Solicitar más evidencia antes de cerrar.",
+            "action_type": "more_evidence",
+            "source_agent": "Monitoreo avanzado",
+            "target_system": "Prompt Firewall demo",
+            "client_name": "Cliente Centro Demo",
+            "risk_score": 61,
+            "confidence_score": 0.52,
+            "evidence_json": {"data_state": "DEMO_LOCAL", "origin": "Monitoreo avanzado", "visible_to_client": True},
+            "recommended_decision": "No aprobar todavía.",
+            "metadata_json": {"demo_local": True},
+            "created_at": now,
+        },
+        {
+            "id": "HC-MED-002",
+            "title": "Reporte ejecutivo mensual preparado",
+            "description": "Reporte listo como muestra local; no contiene telemetría productiva.",
+            "severity": "medium",
+            "status": "pending_review",
+            "proposed_action": "Generar reporte ejecutivo de demostración.",
+            "action_type": "executive_report",
+            "source_agent": "Reporte ejecutivo",
+            "target_system": "Cabina cliente demo",
+            "client_name": "Cliente Sur Demo",
+            "risk_score": 48,
+            "confidence_score": 0.68,
+            "evidence_json": {"data_state": "DEMO_LOCAL", "origin": "Reporte ejecutivo", "visible_to_client": True},
+            "recommended_decision": "Revisar lenguaje antes de entregar.",
+            "metadata_json": {"demo_local": True},
+            "created_at": now,
+        },
+        {
+            "id": "HC-INFO-001",
+            "title": "Señal informativa agrupada",
+            "description": "Evento agrupado sin impacto inmediato.",
+            "severity": "info",
+            "status": "pending_review",
+            "proposed_action": "Mantener observación sin ruido.",
+            "action_type": "observe",
+            "source_agent": "Señales externas",
+            "target_system": "Superficie demo",
+            "client_name": "Cliente Centro Demo",
+            "risk_score": 18,
+            "confidence_score": 0.64,
+            "evidence_json": {"data_state": "DEMO_LOCAL", "origin": "Señales externas", "visible_to_client": True},
+            "recommended_decision": "No molestar al cliente; incluir en historial.",
+            "metadata_json": {"demo_local": True},
+            "created_at": now,
+        },
+        {
+            "id": "HC-BLOCK-001",
+            "title": "Acción sensible bloqueada",
+            "description": "Solicitud de acción irreversible bloqueada por política.",
+            "severity": "critical",
+            "status": "blocked",
+            "proposed_action": BLOCKED_ACTION_MESSAGE,
+            "action_type": "irreversible_action",
+            "source_agent": "Motor de riesgo",
+            "target_system": "Infraestructura demo",
+            "client_name": "Cliente Norte Demo",
+            "risk_score": 99,
+            "confidence_score": 0.9,
+            "evidence_json": {"data_state": "DEMO_LOCAL", "origin": "Motor de riesgo", "visible_to_client": True},
+            "recommended_decision": "Mantener bloqueado.",
+            "metadata_json": {"demo_local": True, "blocked_by_default": True},
+            "created_at": now,
+        },
+    ]
+
+def _pricing_seed_records():
+    return [
+        {
+            "id": "plan_empresa",
+            "name": "Plan Empresa",
+            "monthly_price_pen": 199,
+            "description": "Cabina cliente, alertas priorizadas y reportes ejecutivos básicos.",
+            "features_json": ["monitoreo defensivo base", "alertas priorizadas", "cabina cliente", "reportes ejecutivos básicos"],
+        },
+        {
+            "id": "plan_premium",
+            "name": "Plan Premium",
+            "monthly_price_pen": 499,
+            "description": "Mayor profundidad de evidencia, decisiones humanas e historial avanzado.",
+            "features_json": ["todo empresa", "mayor profundidad de evidencia", "decisiones humanas", "historial avanzado", "reportes premium"],
+        },
+        {
+            "id": "plan_corporativo",
+            "name": "Plan Corporativo",
+            "monthly_price_pen": 999,
+            "description": "Desde S/999 al mes para múltiples activos, gobierno de riesgo y prioridad alta.",
+            "features_json": ["todo premium", "múltiples activos/clientes", "gobierno de riesgo", "prioridad alta", "capa admin/CEO ampliada"],
+        },
+    ]
+
+def _ensure_human_cabin_seed():
+    db = SessionLocal()
+    try:
+        if db.query(HumanReviewRequestModel).count() == 0:
+            for record in _human_cabin_seed_records():
+                db.add(HumanReviewRequestModel(
+                    id=record["id"],
+                    title=record["title"],
+                    description=record["description"],
+                    severity=record["severity"],
+                    status=record["status"],
+                    proposed_action=record["proposed_action"],
+                    action_type=record["action_type"],
+                    source_agent=_safe_source_agent(record["source_agent"]),
+                    target_system=record["target_system"],
+                    client_name=record["client_name"],
+                    risk_score=record["risk_score"],
+                    confidence_score=record["confidence_score"],
+                    evidence_json=json.dumps(record["evidence_json"], ensure_ascii=False),
+                    recommended_decision=record["recommended_decision"],
+                    created_at=record["created_at"],
+                    expires_at=record["created_at"] + timedelta(days=7),
+                    metadata_json=json.dumps(record["metadata_json"], ensure_ascii=False),
+                ))
+            db.commit()
+        if db.query(SentinelaPricingPlanModel).count() == 0:
+            for record in _pricing_seed_records():
+                db.add(SentinelaPricingPlanModel(
+                    id=record["id"],
+                    name=record["name"],
+                    monthly_price_pen=record["monthly_price_pen"],
+                    description=record["description"],
+                    features_json=json.dumps(record["features_json"], ensure_ascii=False),
+                    is_active=True,
+                ))
+            db.commit()
+        if db.query(SentinelaClientSecuritySummaryModel).count() == 0:
+            db.add(SentinelaClientSecuritySummaryModel(
+                id="client-demo-norte",
+                client_id="client-demo-norte",
+                client_name="Cliente Norte Demo",
+                plan="Premium",
+                protection_status="Vigilado",
+                global_risk="critical",
+                active_incidents=1,
+                pending_decisions=2,
+                last_scan_at=datetime.utcnow(),
+                last_report_at=datetime.utcnow(),
+                metadata_json=json.dumps({"data_state": "DEMO_LOCAL", "subscription_status": "demo_local_no_payment"}, ensure_ascii=False),
+            ))
+            db.add(SentinelaClientSecuritySummaryModel(
+                id="client-demo-sur",
+                client_id="client-demo-sur",
+                client_name="Cliente Sur Demo",
+                plan="Empresa",
+                protection_status="Presionado",
+                global_risk="high",
+                active_incidents=2,
+                pending_decisions=1,
+                last_scan_at=datetime.utcnow(),
+                last_report_at=datetime.utcnow(),
+                metadata_json=json.dumps({"data_state": "DEMO_LOCAL", "subscription_status": "demo_local_no_payment"}, ensure_ascii=False),
+            ))
+            db.add(SentinelaClientSecuritySummaryModel(
+                id="client-demo-centro",
+                client_id="client-demo-centro",
+                client_name="Cliente Centro Demo",
+                plan="Corporativo",
+                protection_status="Vigilado",
+                global_risk="medium",
+                active_incidents=0,
+                pending_decisions=1,
+                last_scan_at=datetime.utcnow(),
+                last_report_at=datetime.utcnow(),
+                metadata_json=json.dumps({"data_state": "DEMO_LOCAL", "subscription_status": "demo_local_no_payment"}, ensure_ascii=False),
+            ))
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+def _serialize_human_request(row: HumanReviewRequestModel) -> dict:
+    return {
+        "id": row.id,
+        "title": row.title,
+        "description": row.description,
+        "severity": row.severity,
+        "status": row.status,
+        "proposed_action": row.proposed_action,
+        "action_type": row.action_type,
+        "source_agent": _safe_source_agent(row.source_agent),
+        "target_system": row.target_system,
+        "client_name": row.client_name,
+        "risk_score": row.risk_score,
+        "confidence_score": row.confidence_score,
+        "evidence": _json_loads(row.evidence_json, {}),
+        "recommended_decision": row.recommended_decision,
+        "reviewer_id": row.reviewer_id,
+        "reviewer_notes": row.reviewer_notes,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+        "metadata": _json_loads(row.metadata_json, {}),
+    }
+
+def _serialize_human_audit(row: HumanReviewAuditEventModel) -> dict:
+    return {
+        "id": row.id,
+        "review_request_id": row.review_request_id,
+        "actor": row.actor,
+        "action": row.action,
+        "previous_status": row.previous_status,
+        "new_status": row.new_status,
+        "notes": row.notes,
+        "severity": row.severity,
+        "target_system": row.target_system,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "metadata": _json_loads(row.metadata_json, {}),
+    }
+
+def _serialize_client_summary(row: SentinelaClientSecuritySummaryModel) -> dict:
+    return {
+        "id": row.id,
+        "client_id": row.client_id,
+        "client_name": row.client_name,
+        "plan": row.plan,
+        "protection_status": row.protection_status,
+        "global_risk": row.global_risk,
+        "active_incidents": row.active_incidents,
+        "pending_decisions": row.pending_decisions,
+        "last_scan_at": row.last_scan_at.isoformat() if row.last_scan_at else None,
+        "last_report_at": row.last_report_at.isoformat() if row.last_report_at else None,
+        "metadata": _json_loads(row.metadata_json, {}),
+    }
+
+def _serialize_pricing(row: SentinelaPricingPlanModel) -> dict:
+    price_label = "desde S/999/mes" if row.id == "plan_corporativo" else f"S/{row.monthly_price_pen}/mes"
+    return {
+        "id": row.id,
+        "name": row.name,
+        "monthly_price_pen": row.monthly_price_pen,
+        "price_label": price_label,
+        "description": row.description,
+        "features": _json_loads(row.features_json, []),
+        "is_active": row.is_active,
+        "payment_status": "prepared_no_checkout",
+    }
+
+def _ordered_human_requests(db, only_client_visible: bool = False):
+    rows = db.query(HumanReviewRequestModel).all()
+    items = [_serialize_human_request(row) for row in rows]
+    if only_client_visible:
+        items = [item for item in items if item.get("evidence", {}).get("visible_to_client") is True]
+    return sorted(
+        items,
+        key=lambda item: (
+            -SEVERITY_WEIGHT.get(str(item.get("severity", "")).lower(), 0),
+            -float(item.get("risk_score") or 0),
+            str(item.get("created_at") or ""),
+        ),
+    )
+
+def _human_cabin_summary_payload(db) -> dict:
+    requests = _ordered_human_requests(db)
+    critical = [item for item in requests if item["severity"] == "critical"]
+    pending = [item for item in requests if item["status"] in {"pending_review", "needs_more_evidence", "escalated"}]
+    blocked = [item for item in requests if item["status"] == "blocked"]
+    clients = [_serialize_client_summary(row) for row in db.query(SentinelaClientSecuritySummaryModel).all()]
+    plans = [_serialize_pricing(row) for row in db.query(SentinelaPricingPlanModel).filter(SentinelaPricingPlanModel.is_active == True).all()]
+    audit_count = db.query(HumanReviewAuditEventModel).count()
+    return {
+        "mode": "DEMO_LOCAL",
+        "source": "SENTINELA_HUMAN_CABIN_SYNTHESIS_DRAFT",
+        "protection_status": "Vigilado",
+        "global_risk": "critical" if critical else "medium",
+        "risk_temperature": "CRITICAL" if critical else "PRESSURED",
+        "plan_current": "Premium demo/local",
+        "subscription_status": "demo_local_no_payment",
+        "active_incidents": len([item for item in requests if item["status"] not in {"closed", "cancelled"}]),
+        "pending_decisions": len(pending),
+        "blocked_actions": len(blocked),
+        "system_confidence": 74,
+        "average_response_minutes": 11,
+        "top_priority": requests[0] if requests else None,
+        "requests": requests,
+        "clients": clients,
+        "plans": plans,
+        "audit_events_count": audit_count,
+        "safe_public_source_labels": [
+            "Inteligencia de amenazas",
+            "Motor de riesgo",
+            "Monitoreo avanzado",
+            "Señales externas",
+            "Análisis interno",
+        ],
+        "blocked_action_message": BLOCKED_ACTION_MESSAGE,
+        "client_visibility_policy": {
+            "protected_internal_sources_exposed": False,
+            "admin_public_access": False,
+            "ceo_public_access": False,
+            "full_free_trial": False,
+            "real_payment_enabled": False,
+        },
+    }
+
+def _record_human_audit(db, request_row: HumanReviewRequestModel, actor: str, action: str, previous_status: str, new_status: str, notes: str | None = None):
+    event = HumanReviewAuditEventModel(
+        id=f"HCA-{str(uuid.uuid4())[:8].upper()}",
+        review_request_id=request_row.id,
+        actor=actor,
+        action=action,
+        previous_status=previous_status,
+        new_status=new_status,
+        notes=notes or "",
+        severity=request_row.severity,
+        target_system=request_row.target_system,
+        created_at=datetime.utcnow(),
+        metadata_json=json.dumps({"data_state": "DEMO_LOCAL", "audit_trail": True}, ensure_ascii=False),
+    )
+    db.add(event)
+    return event
+
+def _apply_human_review_action(request_id: str, current_user, new_status: str, action: str, notes: str | None = None) -> dict:
+    _ensure_human_cabin_seed()
+    db = SessionLocal()
+    try:
+        row = db.query(HumanReviewRequestModel).filter(HumanReviewRequestModel.id == request_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Human review request not found")
+        previous = row.status
+        if row.status == "blocked" and action != "block_sensitive_action":
+            new_status = "blocked"
+            notes = notes or BLOCKED_ACTION_MESSAGE
+        row.status = new_status
+        row.reviewer_id = getattr(current_user, "username", "unknown")
+        row.reviewer_notes = notes or ""
+        row.reviewed_at = datetime.utcnow()
+        _record_human_audit(db, row, row.reviewer_id, action, previous, row.status, notes)
+        db.commit()
+        db.refresh(row)
+        return {"request": _serialize_human_request(row), "audit_registered": True}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"human cabin action failed: {exc}")
+    finally:
+        db.close()
+
+@app.get("/api/v1/human-cabin/summary")
+async def get_human_cabin_summary(current_user=Depends(get_current_user)):
+    _ensure_human_cabin_seed()
+    db = SessionLocal()
+    try:
+        return _human_cabin_summary_payload(db)
+    finally:
+        db.close()
+
+@app.get("/api/v1/human-cabin/requests")
+async def get_human_cabin_requests(current_user=Depends(get_current_user)):
+    _ensure_human_cabin_seed()
+    db = SessionLocal()
+    try:
+        return _ordered_human_requests(db)
+    finally:
+        db.close()
+
+@app.get("/api/v1/human-cabin/requests/{request_id}")
+async def get_human_cabin_request(request_id: str, current_user=Depends(get_current_user)):
+    _ensure_human_cabin_seed()
+    db = SessionLocal()
+    try:
+        row = db.query(HumanReviewRequestModel).filter(HumanReviewRequestModel.id == request_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Human review request not found")
+        return _serialize_human_request(row)
+    finally:
+        db.close()
+
+@app.post("/api/v1/human-cabin/requests")
+async def create_human_cabin_request(payload: dict, current_user=Depends(get_current_user)):
+    _ensure_human_cabin_seed()
+    action_type = str(payload.get("action_type", "human_review"))
+    proposed_action = str(payload.get("proposed_action", "Revisión humana requerida."))
+    status_value = "blocked" if _is_sensitive_human_action(action_type, proposed_action) else str(payload.get("status", "pending_review"))
+    if status_value == "executed":
+        status_value = "pending_review"
+    db = SessionLocal()
+    try:
+        request_id = payload.get("id") or f"HC-{str(uuid.uuid4())[:8].upper()}"
+        row = HumanReviewRequestModel(
+            id=request_id,
+            title=str(payload.get("title", "Solicitud de revisión humana")),
+            description=str(payload.get("description", "Solicitud local preparada para revisión humana.")),
+            severity=str(payload.get("severity", "medium")).lower(),
+            status=status_value,
+            proposed_action=BLOCKED_ACTION_MESSAGE if status_value == "blocked" else proposed_action,
+            action_type=action_type,
+            source_agent=_safe_source_agent(payload.get("source_agent")),
+            target_system=str(payload.get("target_system", "Sistema demo")),
+            client_name=str(payload.get("client_name", "Cliente Demo")),
+            risk_score=float(payload.get("risk_score", 50)),
+            confidence_score=float(payload.get("confidence_score", 0.5)),
+            evidence_json=json.dumps(payload.get("evidence", {"data_state": "DEMO_LOCAL"}), ensure_ascii=False),
+            recommended_decision=str(payload.get("recommended_decision", "Revisar antes de avanzar.")),
+            created_at=datetime.utcnow(),
+            expires_at=datetime.utcnow() + timedelta(days=7),
+            metadata_json=json.dumps({"demo_local": True, "created_by": getattr(current_user, "username", "unknown")}, ensure_ascii=False),
+        )
+        db.add(row)
+        _record_human_audit(db, row, getattr(current_user, "username", "unknown"), "create", "none", row.status, "Solicitud creada localmente.")
+        db.commit()
+        db.refresh(row)
+        return _serialize_human_request(row)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"human cabin create failed: {exc}")
+    finally:
+        db.close()
+
+@app.post("/api/v1/human-cabin/requests/{request_id}/approve")
+async def approve_human_cabin_request(request_id: str, payload: dict | None = None, current_user=Depends(get_current_user)):
+    return _apply_human_review_action(request_id, current_user, "approved", "approve", (payload or {}).get("notes") if payload else None)
+
+@app.post("/api/v1/human-cabin/requests/{request_id}/reject")
+async def reject_human_cabin_request(request_id: str, payload: dict | None = None, current_user=Depends(get_current_user)):
+    return _apply_human_review_action(request_id, current_user, "rejected", "reject", (payload or {}).get("notes") if payload else None)
+
+@app.post("/api/v1/human-cabin/requests/{request_id}/pause")
+async def pause_human_cabin_request(request_id: str, payload: dict | None = None, current_user=Depends(get_current_user)):
+    return _apply_human_review_action(request_id, current_user, "paused", "pause", (payload or {}).get("notes") if payload else None)
+
+@app.post("/api/v1/human-cabin/requests/{request_id}/more-evidence")
+async def more_evidence_human_cabin_request(request_id: str, payload: dict | None = None, current_user=Depends(get_current_user)):
+    return _apply_human_review_action(request_id, current_user, "needs_more_evidence", "more_evidence", (payload or {}).get("notes") if payload else None)
+
+@app.post("/api/v1/human-cabin/requests/{request_id}/escalate")
+async def escalate_human_cabin_request(request_id: str, payload: dict | None = None, current_user=Depends(get_current_user)):
+    return _apply_human_review_action(request_id, current_user, "escalated", "escalate", (payload or {}).get("notes") if payload else None)
+
+@app.post("/api/v1/human-cabin/requests/{request_id}/false-positive")
+async def false_positive_human_cabin_request(request_id: str, payload: dict | None = None, current_user=Depends(get_current_user)):
+    return _apply_human_review_action(request_id, current_user, "rejected", "false_positive", (payload or {}).get("notes") if payload else None)
+
+@app.post("/api/v1/human-cabin/requests/{request_id}/close")
+async def close_human_cabin_request(request_id: str, payload: dict | None = None, current_user=Depends(get_current_user)):
+    return _apply_human_review_action(request_id, current_user, "cancelled", "close_incident", (payload or {}).get("notes") if payload else None)
+
+@app.post("/api/v1/human-cabin/requests/{request_id}/accept-risk")
+async def accept_risk_human_cabin_request(request_id: str, payload: dict | None = None, current_user=Depends(get_current_user)):
+    return _apply_human_review_action(request_id, current_user, "approved", "accept_risk", (payload or {}).get("notes") if payload else None)
+
+@app.post("/api/v1/human-cabin/requests/{request_id}/block-sensitive-action")
+async def block_sensitive_human_cabin_request(request_id: str, payload: dict | None = None, current_user=Depends(get_current_user)):
+    return _apply_human_review_action(request_id, current_user, "blocked", "block_sensitive_action", (payload or {}).get("notes") if payload else BLOCKED_ACTION_MESSAGE)
+
+@app.post("/api/v1/human-cabin/requests/{request_id}/executive-report")
+async def executive_report_human_cabin_request(request_id: str, payload: dict | None = None, current_user=Depends(get_current_user)):
+    return _apply_human_review_action(request_id, current_user, "pending_review", "executive_report", (payload or {}).get("notes") if payload else "Reporte ejecutivo generado en modo demo/local.")
+
+@app.get("/api/v1/human-cabin/audit")
+async def get_human_cabin_audit(current_user=Depends(get_current_user)):
+    _ensure_human_cabin_seed()
+    db = SessionLocal()
+    try:
+        rows = db.query(HumanReviewAuditEventModel).order_by(HumanReviewAuditEventModel.created_at.desc()).limit(100).all()
+        return [_serialize_human_audit(row) for row in rows]
+    finally:
+        db.close()
+
+@app.get("/api/v1/human-cabin/pricing")
+async def get_human_cabin_pricing(current_user=Depends(get_current_user)):
+    _ensure_human_cabin_seed()
+    db = SessionLocal()
+    try:
+        return [_serialize_pricing(row) for row in db.query(SentinelaPricingPlanModel).filter(SentinelaPricingPlanModel.is_active == True).all()]
+    finally:
+        db.close()
+
+@app.get("/api/v1/human-cabin/client-view")
+async def get_human_cabin_client_view(current_user=Depends(get_current_user)):
+    _ensure_human_cabin_seed()
+    db = SessionLocal()
+    try:
+        summary = _human_cabin_summary_payload(db)
+        return {
+            "mode": summary["mode"],
+            "summary": {
+                "protection_status": summary["protection_status"],
+                "global_risk": summary["global_risk"],
+                "risk_temperature": summary["risk_temperature"],
+                "plan_current": summary["plan_current"],
+                "subscription_status": summary["subscription_status"],
+                "active_incidents": summary["active_incidents"],
+                "pending_decisions": summary["pending_decisions"],
+                "blocked_actions": summary["blocked_actions"],
+            },
+            "requests": _ordered_human_requests(db, only_client_visible=True),
+            "plans": summary["plans"],
+            "visibility_policy": summary["client_visibility_policy"],
+        }
+    finally:
+        db.close()
+
+@app.get("/api/v1/human-cabin/admin-view")
+async def get_human_cabin_admin_view(current_user=Depends(get_current_user)):
+    _ensure_human_cabin_seed()
+    db = SessionLocal()
+    try:
+        summary = _human_cabin_summary_payload(db)
+        return {
+            "mode": summary["mode"],
+            "queue": summary["requests"],
+            "audit_events_count": summary["audit_events_count"],
+            "allowed_actions": ["approve", "reject", "pause", "more_evidence", "escalate", "false_positive", "close_incident", "accept_risk", "block_sensitive_action", "executive_report"],
+            "blocked_actions": list(sorted(BLOCKED_HUMAN_ACTION_TYPES)),
+            "blocked_action_message": BLOCKED_ACTION_MESSAGE,
+        }
+    finally:
+        db.close()
+
+@app.get("/api/v1/human-cabin/ceo-view")
+async def get_human_cabin_ceo_view(current_user=Depends(get_current_user)):
+    _ensure_human_cabin_seed()
+    db = SessionLocal()
+    try:
+        summary = _human_cabin_summary_payload(db)
+        return {
+            "mode": summary["mode"],
+            "strategic_state": "Protección premium preparada localmente",
+            "critical_decisions": [item for item in summary["requests"] if item["severity"] == "critical"],
+            "missing_evidence": [item for item in summary["requests"] if item["status"] == "needs_more_evidence"],
+            "requires_final_override": [item for item in summary["requests"] if item["status"] in {"blocked", "escalated"}],
+            "internal_relationships_protected": True,
+            "public_client_source_names": summary["safe_public_source_labels"],
+        }
+    finally:
+        db.close()
 
 @app.get("/api/v1/stats/db")
 async def get_db_stats(current_user=Depends(get_current_user)):

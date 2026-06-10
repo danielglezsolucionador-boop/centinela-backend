@@ -68,6 +68,66 @@ class NormalizedEventModel(Base):
     raw = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class HumanReviewRequestModel(Base):
+    __tablename__ = "human_review_requests"
+    id = Column(String, primary_key=True)
+    title = Column(String, index=True)
+    description = Column(Text)
+    severity = Column(String, index=True)
+    status = Column(String, index=True)
+    proposed_action = Column(Text)
+    action_type = Column(String, index=True)
+    source_agent = Column(String, index=True)
+    target_system = Column(String, index=True)
+    client_name = Column(String, index=True)
+    risk_score = Column(Float, default=0)
+    confidence_score = Column(Float, default=0)
+    evidence_json = Column(Text)
+    recommended_decision = Column(Text)
+    reviewer_id = Column(String, nullable=True)
+    reviewer_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    reviewed_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    metadata_json = Column(Text)
+
+class HumanReviewAuditEventModel(Base):
+    __tablename__ = "human_review_audit_events"
+    id = Column(String, primary_key=True)
+    review_request_id = Column(String, index=True)
+    actor = Column(String, index=True)
+    action = Column(String, index=True)
+    previous_status = Column(String)
+    new_status = Column(String)
+    notes = Column(Text)
+    severity = Column(String, index=True)
+    target_system = Column(String, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    metadata_json = Column(Text)
+
+class SentinelaClientSecuritySummaryModel(Base):
+    __tablename__ = "sentinela_client_security_summary"
+    id = Column(String, primary_key=True)
+    client_id = Column(String, index=True)
+    client_name = Column(String, index=True)
+    plan = Column(String)
+    protection_status = Column(String, index=True)
+    global_risk = Column(String, index=True)
+    active_incidents = Column(Integer, default=0)
+    pending_decisions = Column(Integer, default=0)
+    last_scan_at = Column(DateTime, nullable=True)
+    last_report_at = Column(DateTime, nullable=True)
+    metadata_json = Column(Text)
+
+class SentinelaPricingPlanModel(Base):
+    __tablename__ = "sentinela_pricing_plans"
+    id = Column(String, primary_key=True)
+    name = Column(String, unique=True, index=True)
+    monthly_price_pen = Column(Integer)
+    description = Column(Text)
+    features_json = Column(Text)
+    is_active = Column(Boolean, default=True)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     ensure_schema_compatibility()
