@@ -20,6 +20,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes", "on"}
+
+SERVERLESS_MODE = _env_flag("SERVERLESS_MODE") or _env_flag("VERCEL")
+
 # â”€â”€ User Model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class UserModel(Base):
     __tablename__ = "users"
@@ -31,10 +36,13 @@ class UserModel(Base):
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-try:
-    Base.metadata.create_all(bind=engine)
-except Exception as e:
-    print(f"auth schema init deferred: {e}")
+if SERVERLESS_MODE:
+    print("auth schema init deferred: serverless mode")
+else:
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"auth schema init deferred: {e}")
 
 # â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def hash_password(password: str) -> str:

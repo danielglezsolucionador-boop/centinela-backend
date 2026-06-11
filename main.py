@@ -59,6 +59,11 @@ from core.auth import (
 
 RUNTIME_VERSION = "2.0.0"
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes", "on"}
+
+SERVERLESS_MODE = _env_flag("SERVERLESS_MODE") or _env_flag("VERCEL")
+
 def _local_git_value(args: list[str], fallback: str) -> str:
     try:
         return subprocess.check_output(
@@ -71,16 +76,27 @@ def _local_git_value(args: list[str], fallback: str) -> str:
     except Exception:
         return fallback
 
-PROVENANCE_BRANCH = os.environ.get("RENDER_GIT_BRANCH") or _local_git_value(["branch", "--show-current"], "main")
+def _deployment_target_default() -> str:
+    vercel_url = os.environ.get("VERCEL_URL")
+    if vercel_url:
+        return f"https://{vercel_url}"
+    return "Render backend: https://centinela-backend-kzwk.onrender.com"
+
+PROVENANCE_BRANCH = (
+    os.environ.get("VERCEL_GIT_COMMIT_REF")
+    or os.environ.get("RENDER_GIT_BRANCH")
+    or _local_git_value(["branch", "--show-current"], "main")
+)
 PROVENANCE_COMMIT = (
-    os.environ.get("RENDER_GIT_COMMIT")
+    os.environ.get("VERCEL_GIT_COMMIT_SHA")
+    or os.environ.get("RENDER_GIT_COMMIT")
     or os.environ.get("GIT_COMMIT")
     or _local_git_value(["rev-parse", "HEAD"], "unknown")
 )
 PROVENANCE_BUILD_TIMESTAMP = os.environ.get("BUILD_TIMESTAMP", "2026-05-27T06:09:24-05:00")
 PROVENANCE_DEPLOYMENT_TARGET = os.environ.get(
     "DEPLOYMENT_TARGET",
-    "Render backend: https://centinela-backend-kzwk.onrender.com",
+    _deployment_target_default(),
 )
 PROVENANCE_PHASE_STATUS = "Phase 2.3 provenance visible; no secrets or local paths exposed"
 
@@ -130,7 +146,10 @@ app.add_middleware(
 
 # â”€â”€ Initialize Core Engines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 threat_memory = ThreatMemory()
-threat_memory.hydrate_from_db()
+if SERVERLESS_MODE:
+    logger.info("SERVERLESS MODE | threat memory hydration deferred")
+else:
+    threat_memory.hydrate_from_db()
 risk_engine = RiskEngine(threat_memory)
 correlation_engine = ThreatCorrelationEngine(threat_memory)
 threat_detection = ThreatDetectionEngine(threat_memory)
@@ -149,6 +168,10 @@ phase7_governance = PhaseSevenGovernance()
 
 @app.on_event("startup")
 async def startup():
+    if SERVERLESS_MODE:
+        logger.info("SERVERLESS MODE | DB startup initialization deferred")
+        print("CENTINELA Core v2.0 - serverless startup ready")
+        return
     db_ready = init_db()
     if db_ready:
         init_default_admin()
@@ -1616,15 +1639,27 @@ async def get_db_columns(current_user=Depends(get_admin_user)):
     with engine.connect() as conn:
         result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='events'"))
         return {"columns": [row[0] for row in result]}
+def _health_db_stats() -> tuple[dict, str | None]:
+    if SERVERLESS_MODE and not _env_flag("CENTINELA_HEALTH_CHECK_DB"):
+        return {}, "serverless_db_probe_skipped"
+    try:
+        return get_stats(), None
+    except Exception as exc:
+        logger.warning("health DB probe failed: %s", exc)
+        return {}, "db_probe_failed"
+
 def _health_payload() -> dict:
-    db_stats = get_stats()
+    db_stats, health_note = _health_db_stats()
     db_connected = bool(db_stats)
     return {
-        "status": "OPERATIONAL" if db_connected else "DEGRADED",
+        "status": "OPERATIONAL" if db_connected else ("degraded" if SERVERLESS_MODE else "DEGRADED"),
+        "mode": "persistent" if db_connected else "ram_only",
         "engine": "CENTINELA Core v2.0",
         "runtime_version": RUNTIME_VERSION,
         "timestamp": datetime.utcnow().isoformat(),
-        "database": "CONNECTED" if db_connected else "RAM_ONLY",
+        "database": "CONNECTED" if db_connected else "unavailable",
+        "health_note": health_note,
+        "serverless_mode": SERVERLESS_MODE,
         "provenance": public_provenance(),
         "engines": {
             "pipeline": "ONLINE",

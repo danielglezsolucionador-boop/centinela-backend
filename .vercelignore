@@ -1,0 +1,17 @@
+.env
+.env.*
+.vercel
+.venv
+venv
+node_modules
+dist
+logs
+cache
+tokens
+secrets
+cookies
+__pycache__
+*.pyc
+.pytest_cache
+*.db
+backup_*.json

@@ -5,7 +5,12 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timedelta
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./centinela.db")
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes", "on"}
+
+SERVERLESS_MODE = _env_flag("SERVERLESS_MODE") or _env_flag("VERCEL")
+DEFAULT_DATABASE_URL = "sqlite:////tmp/centinela.db" if SERVERLESS_MODE else "sqlite:///./centinela.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 

@@ -7,3 +7,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 venv/
+.venv/
+.vercel/
+node_modules/
+dist/
+logs/
+cache/
+tokens/
+secrets/
+cookies/
