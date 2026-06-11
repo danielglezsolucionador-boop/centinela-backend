@@ -7,7 +7,8 @@ import logging
 from core.database import SessionLocal, EventModel, IncidentModel, ThreatPatternModel, init_db
 logger = logging.getLogger("centinela")
 
-init_db()
+if os.environ.get("CENTINELA_INIT_DB_ON_IMPORT") == "1":
+    init_db()
 
 class ThreatMemory:
     def __init__(self):

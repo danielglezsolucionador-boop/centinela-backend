@@ -149,8 +149,11 @@ phase7_governance = PhaseSevenGovernance()
 
 @app.on_event("startup")
 async def startup():
-    init_db()
-    init_default_admin()
+    db_ready = init_db()
+    if db_ready:
+        init_default_admin()
+    else:
+        logger.warning("DB unavailable during startup; API will expose degraded health")
     print("CENTINELA Core v2.0 â€” All engines online")
 
 # â”€â”€ WebSocket Manager â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1615,12 +1618,13 @@ async def get_db_columns(current_user=Depends(get_admin_user)):
         return {"columns": [row[0] for row in result]}
 def _health_payload() -> dict:
     db_stats = get_stats()
+    db_connected = bool(db_stats)
     return {
-        "status": "OPERATIONAL",
+        "status": "OPERATIONAL" if db_connected else "DEGRADED",
         "engine": "CENTINELA Core v2.0",
         "runtime_version": RUNTIME_VERSION,
         "timestamp": datetime.utcnow().isoformat(),
-        "database": "CONNECTED" if db_stats else "RAM_ONLY",
+        "database": "CONNECTED" if db_connected else "RAM_ONLY",
         "provenance": public_provenance(),
         "engines": {
             "pipeline": "ONLINE",

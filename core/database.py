@@ -9,7 +9,13 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./centinela.db")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(DATABASE_URL)
+engine_kwargs = {"pool_pre_ping": True}
+if DATABASE_URL.startswith("postgresql://"):
+    engine_kwargs["connect_args"] = {
+        "connect_timeout": int(os.environ.get("DB_CONNECT_TIMEOUT", "5"))
+    }
+
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -128,9 +134,14 @@ class SentinelaPricingPlanModel(Base):
     features_json = Column(Text)
     is_active = Column(Boolean, default=True)
 
-def init_db():
-    Base.metadata.create_all(bind=engine)
-    ensure_schema_compatibility()
+def init_db() -> bool:
+    try:
+        Base.metadata.create_all(bind=engine)
+        ensure_schema_compatibility()
+        return True
+    except Exception as e:
+        print(f"init_db error: {e}")
+        return False
 
 def ensure_schema_compatibility():
     """Apply small idempotent migrations for pre-Phase schemas."""

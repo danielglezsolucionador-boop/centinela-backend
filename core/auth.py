@@ -31,7 +31,10 @@ class UserModel(Base):
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"auth schema init deferred: {e}")
 
 # â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def hash_password(password: str) -> str:
@@ -50,6 +53,9 @@ def get_user(username: str):
     db = SessionLocal()
     try:
         return db.query(UserModel).filter(UserModel.username == username).first()
+    except Exception as e:
+        print(f"get_user error: {e}")
+        return None
     finally:
         db.close()
 
@@ -108,9 +114,12 @@ def init_default_admin():
         if os.environ.get("ENVIRONMENT") == "production":
             raise RuntimeError("ADMIN_PASSWORD must be configured in production")
         admin_password = "centinela-local-dev-password-change-me"
-    existing = get_user(admin_username)
-    if not existing:
-        create_user(admin_username, admin_email, admin_password, is_admin=True)
-        print(f"OK Admin user created: {admin_username}")
-    else:
-        print(f"OK Admin user exists: {admin_username}")
+    try:
+        existing = get_user(admin_username)
+        if not existing:
+            create_user(admin_username, admin_email, admin_password, is_admin=True)
+            print(f"OK Admin user created: {admin_username}")
+        else:
+            print(f"OK Admin user exists: {admin_username}")
+    except Exception as e:
+        print(f"admin init skipped: {e}")
