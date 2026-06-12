@@ -1644,7 +1644,10 @@ def _health_db_stats() -> tuple[dict, str | None]:
     if SERVERLESS_MODE and not (_env_flag("CENTINELA_HEALTH_CHECK_DB") or DATABASE_URL_CONFIGURED):
         return {}, "serverless_db_probe_skipped"
     try:
-        return get_stats(), None
+        stats = get_stats()
+        if not stats:
+            return {}, "db_probe_failed"
+        return stats, None
     except Exception as exc:
         logger.warning("health DB probe failed: %s", exc)
         return {}, "db_probe_failed"

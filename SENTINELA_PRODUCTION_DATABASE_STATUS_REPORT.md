@@ -26,24 +26,27 @@ El repo backend quedo preparado para que, cuando exista `DATABASE_URL` en el ent
 
 ## Variables Vercel
 
-`vercel env ls production` y `vercel env ls production --format json` no devolvieron nombres de variables.
+`vercel env ls production` y `vercel env ls production --format json` no devolvieron tabla legible de variables.
+
+`vercel env pull --environment=production` a archivo temporal fuera del repo mostro las claves esperadas, pero el archivo local exportado no permitio validar valores no vacios. El archivo temporal fue eliminado despues de la auditoria.
 
 Variables esperadas por la orden:
 
-- `DATABASE_URL`: no confirmada en Vercel Production.
-- `SECRET_KEY`: no confirmada en Vercel Production.
-- `ADMIN_PASSWORD`: no confirmada en Vercel Production.
-- `SERVERLESS_MODE=1`: no confirmada como variable Vercel; `api/index.py` la fuerza en runtime.
-- `ENVIRONMENT=production`: no confirmada en Vercel Production.
-- `CORS_ORIGINS=https://centinela-alpha.vercel.app`: no confirmada como variable Vercel; el origen ya esta hardcodeado en CORS.
+- `DATABASE_URL`: clave presente en pull temporal; valor no impreso y no validado como usable.
+- `SECRET_KEY`: clave presente en pull temporal; valor no impreso.
+- `ADMIN_PASSWORD`: clave presente en pull temporal; valor no impreso.
+- `SERVERLESS_MODE`: clave presente en pull temporal; `api/index.py` ademas fuerza serverless en runtime.
+- `ENVIRONMENT`: clave presente en pull temporal; valor no impreso.
+- `CORS_ORIGINS`: clave presente en pull temporal; el origen de frontend tambien esta hardcodeado en CORS.
 
 ## DATABASE_URL
 
 - `DATABASE_URL` local existe en `.env.local`, pero apunta a un host Render PostgreSQL.
 - Esa URL no fue cargada en Vercel porque la orden explicita dice: no volver a Render / Render queda descartado.
+- Produccion tiene probe DB activo despues del cambio, pero sigue sin conexion valida: `database=unavailable`.
 - No se encontro una `DATABASE_URL` alternativa no-Render en variables de entorno locales ni en archivos no secretos del repo.
 
-Estado: FALTA DATABASE_URL PRODUCTIVA.
+Estado: FALTA DATABASE_URL PRODUCTIVA USABLE / CONECTADA.
 
 ## DB Provider
 
@@ -95,10 +98,18 @@ Cambio aplicado:
 - `main.py` ahora permite probe DB en serverless si `DATABASE_URL` existe.
 - Si `DATABASE_URL` no existe, mantiene el comportamiento degradado y no bloqueante.
 
-Despues en produccion:
+Despues del primer redeploy en produccion:
 
-- Pendiente de redeploy y de `DATABASE_URL` productiva.
-- Sin `DATABASE_URL`, el resultado esperado sigue siendo `database=unavailable`.
+- Commit runtime: `125de43e543a13a6e55ff0a3abf49b263b6bb5d7`
+- HTTP: 200
+- `status`: `degraded`
+- `mode`: `ram_only`
+- `database`: `unavailable`
+- `health_note`: `null` porque el probe se ejecuto pero `get_stats()` devolvio vacio.
+
+Correccion posterior preparada:
+
+- Si el probe DB se ejecuta y `get_stats()` devuelve vacio, `health_note` debe reportar `db_probe_failed`.
 
 ## Endpoints Validados
 
