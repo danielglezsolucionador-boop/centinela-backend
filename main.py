@@ -66,6 +66,7 @@ def _env_flag(name: str) -> bool:
 
 SERVERLESS_MODE = _env_flag("SERVERLESS_MODE") or _env_flag("VERCEL")
 DATABASE_URL_CONFIGURED = database_url_configured()
+DB_INIT_ATTEMPTED = False
 
 def _local_git_value(args: list[str], fallback: str) -> str:
     try:
@@ -1643,15 +1644,20 @@ async def get_db_columns(current_user=Depends(get_admin_user)):
         result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='events'"))
         return {"columns": [row[0] for row in result]}
 def _health_db_stats() -> tuple[dict, str | None]:
+    global DB_INIT_ATTEMPTED
     if SERVERLESS_MODE and not (_env_flag("CENTINELA_HEALTH_CHECK_DB") or DATABASE_URL_CONFIGURED):
         return {}, "serverless_db_probe_skipped"
     if not probe_database():
         logger.warning("health DB probe failed")
         return {}, "db_probe_failed"
+    initialized = False
+    if not DB_INIT_ATTEMPTED:
+        DB_INIT_ATTEMPTED = True
+        initialized = init_db()
     stats = get_stats()
     if not stats:
         return {"probe": "connected"}, "db_stats_unavailable"
-    return stats, None
+    return stats, "db_initialized" if initialized else None
 
 def _health_payload() -> dict:
     db_stats, health_note = _health_db_stats()
