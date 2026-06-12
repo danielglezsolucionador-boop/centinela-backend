@@ -44,6 +44,8 @@ from core.database import (
     delete_old_normalized_events,
     init_db,
     normalized_event_to_dict,
+    database_url_configured,
+    probe_database,
     save_event,
     save_incident,
     save_normalized_event,
@@ -63,7 +65,7 @@ def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").lower() in {"1", "true", "yes", "on"}
 
 SERVERLESS_MODE = _env_flag("SERVERLESS_MODE") or _env_flag("VERCEL")
-DATABASE_URL_CONFIGURED = bool(os.environ.get("DATABASE_URL"))
+DATABASE_URL_CONFIGURED = database_url_configured()
 
 def _local_git_value(args: list[str], fallback: str) -> str:
     try:
@@ -1643,14 +1645,13 @@ async def get_db_columns(current_user=Depends(get_admin_user)):
 def _health_db_stats() -> tuple[dict, str | None]:
     if SERVERLESS_MODE and not (_env_flag("CENTINELA_HEALTH_CHECK_DB") or DATABASE_URL_CONFIGURED):
         return {}, "serverless_db_probe_skipped"
-    try:
-        stats = get_stats()
-        if not stats:
-            return {}, "db_probe_failed"
-        return stats, None
-    except Exception as exc:
-        logger.warning("health DB probe failed: %s", exc)
+    if not probe_database():
+        logger.warning("health DB probe failed")
         return {}, "db_probe_failed"
+    stats = get_stats()
+    if not stats:
+        return {"probe": "connected"}, "db_stats_unavailable"
+    return stats, None
 
 def _health_payload() -> dict:
     db_stats, health_note = _health_db_stats()

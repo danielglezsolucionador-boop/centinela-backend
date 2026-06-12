@@ -10,14 +10,40 @@ def _env_flag(name: str) -> bool:
 
 SERVERLESS_MODE = _env_flag("SERVERLESS_MODE") or _env_flag("VERCEL")
 DEFAULT_DATABASE_URL = "sqlite:////tmp/centinela.db" if SERVERLESS_MODE else "sqlite:///./centinela.db"
-DATABASE_URL = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+DATABASE_URL_CANDIDATES = (
+    "DATABASE_URL",
+    "DATABASE_POSTGRES_URL",
+    "DATABASE_POSTGRES_PRISMA_URL",
+    "DATABASE_URL_UNPOOLED",
+    "DATABASE_POSTGRES_URL_NON_POOLING",
+    "POSTGRES_URL",
+    "POSTGRES_PRISMA_URL",
+    "POSTGRES_URL_NON_POOLING",
+)
+
+def _normalize_database_url(url: str) -> str:
+    normalized = url.strip().strip('"').strip("'")
+    if normalized.startswith("postgres://"):
+        normalized = normalized.replace("postgres://", "postgresql://", 1)
+    if normalized.startswith("postgresql://") and "neon.tech" in normalized.lower() and "sslmode=" not in normalized.lower():
+        separator = "&" if "?" in normalized else "?"
+        normalized = f"{normalized}{separator}sslmode=require"
+    return normalized
+
+def _resolve_database_url() -> tuple[str, str | None]:
+    for name in DATABASE_URL_CANDIDATES:
+        value = os.environ.get(name)
+        if value and value.strip():
+            return _normalize_database_url(value), name
+    return DEFAULT_DATABASE_URL, None
+
+DATABASE_URL, DATABASE_URL_SOURCE = _resolve_database_url()
+DATABASE_CONFIGURED = DATABASE_URL_SOURCE is not None
 
 engine_kwargs = {"pool_pre_ping": True}
 if DATABASE_URL.startswith("postgresql://"):
     engine_kwargs["connect_args"] = {
-        "connect_timeout": int(os.environ.get("DB_CONNECT_TIMEOUT", "5"))
+        "connect_timeout": int(os.environ.get("DB_CONNECT_TIMEOUT", "2"))
     }
 
 engine = create_engine(DATABASE_URL, **engine_kwargs)
@@ -176,6 +202,17 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def database_url_configured() -> bool:
+    return DATABASE_CONFIGURED
+
+def probe_database() -> bool:
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
 
 def save_event(event: dict):
     db = SessionLocal()
