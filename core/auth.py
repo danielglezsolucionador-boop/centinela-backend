@@ -1,5 +1,6 @@
 ﻿import os
 import uuid
+import hmac
 import bcrypt as _bcrypt
 from datetime import datetime, timedelta
 from typing import Optional
@@ -67,6 +68,28 @@ def get_user(username: str):
     finally:
         db.close()
 
+def get_admin_username() -> str:
+    return os.environ.get("ADMIN_USERNAME", "").strip() or "admin"
+
+def get_admin_email() -> str:
+    return os.environ.get("ADMIN_EMAIL", "").strip() or "admin@centinela.local"
+
+def get_admin_password() -> str:
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+    if not admin_password:
+        if os.environ.get("ENVIRONMENT") == "production":
+            raise RuntimeError("ADMIN_PASSWORD must be configured in production")
+        return "centinela-local-dev-password-change-me"
+    return admin_password
+
+def is_configured_admin_login(username: str, password: str) -> bool:
+    admin_username = get_admin_username()
+    admin_password = get_admin_password()
+    return (
+        hmac.compare_digest(str(username), admin_username)
+        and hmac.compare_digest(str(password), admin_password)
+    )
+
 def create_user(username: str, email: str, password: str, is_admin: bool = False):
     db = SessionLocal()
     try:
@@ -78,6 +101,35 @@ def create_user(username: str, email: str, password: str, is_admin: bool = False
             is_admin=is_admin,
         )
         db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
+def ensure_admin_user(username: str, password: str, email: str | None = None):
+    db = SessionLocal()
+    try:
+        user = db.query(UserModel).filter(UserModel.username == username).first()
+        if user is None:
+            user = UserModel(
+                id=str(uuid.uuid4()),
+                username=username,
+                email=email or get_admin_email(),
+                hashed_password=hash_password(password),
+                is_active=True,
+                is_admin=True,
+            )
+            db.add(user)
+        else:
+            user.email = user.email or email or get_admin_email()
+            user.is_active = True
+            user.is_admin = True
+            if not verify_password(password, user.hashed_password):
+                user.hashed_password = hash_password(password)
         db.commit()
         db.refresh(user)
         return user
@@ -115,13 +167,9 @@ async def get_admin_user(current_user=Depends(get_current_user)):
 
 # â”€â”€ Create default admin on startup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def init_default_admin():
-    admin_username = os.environ.get("ADMIN_USERNAME", "daniel")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@centinela.local")
-    if not admin_password:
-        if os.environ.get("ENVIRONMENT") == "production":
-            raise RuntimeError("ADMIN_PASSWORD must be configured in production")
-        admin_password = "centinela-local-dev-password-change-me"
+    admin_username = get_admin_username()
+    admin_password = get_admin_password()
+    admin_email = get_admin_email()
     try:
         existing = get_user(admin_username)
         if not existing:

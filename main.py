@@ -56,7 +56,9 @@ from core.database import (
 )
 from core.auth import (
     get_current_user, get_admin_user, init_default_admin,
-    create_access_token, verify_password, create_user, get_user
+    create_access_token, verify_password, create_user, get_user,
+    ensure_admin_user, get_admin_email, get_admin_password,
+    get_admin_username, is_configured_admin_login
 )
 
 RUNTIME_VERSION = "2.0.0"
@@ -266,7 +268,13 @@ async def login(request: Request, payload: dict):
     password = payload.get("password")
     if not username or not password:
         raise HTTPException(status_code=400, detail="Username and password required")
-    user = get_user(username)
+    admin_username = get_admin_username()
+    if username == admin_username and is_configured_admin_login(username, password):
+        user = ensure_admin_user(username, password, get_admin_email())
+    elif username == admin_username:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    else:
+        user = get_user(username)
     if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not user.is_active:
@@ -274,10 +282,12 @@ async def login(request: Request, payload: dict):
     token = create_access_token({"sub": user.username})
     return {
         "access_token": token,
+        "token": token,
         "token_type": "bearer",
         "username": user.username,
         "email": user.email,
         "is_admin": user.is_admin,
+        "role": "admin" if user.is_admin else "user",
     }
 
 @app.post("/api/v1/auth/register")
@@ -1611,11 +1621,12 @@ async def get_db_stats(current_user=Depends(get_current_user)):
 @app.post("/api/v1/admin/reset")
 async def reset_admin(current_user=Depends(get_admin_user)):
     from core.database import SessionLocal
-    from core.auth import UserModel, create_user
-    admin_username = os.environ.get("ADMIN_USERNAME", "daniel")
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@centinela.local")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-    if not admin_password:
+    from core.auth import UserModel
+    admin_username = get_admin_username()
+    admin_email = get_admin_email()
+    try:
+        admin_password = get_admin_password()
+    except RuntimeError:
         raise HTTPException(status_code=503, detail="ADMIN_PASSWORD must be configured before admin reset")
     db = SessionLocal()
     try:
@@ -1623,7 +1634,7 @@ async def reset_admin(current_user=Depends(get_admin_user)):
         db.commit()
     finally:
         db.close()
-    create_user(admin_username, admin_email, admin_password, is_admin=True)
+    ensure_admin_user(admin_username, admin_password, admin_email)
     return {"status": "admin reset ok", "username": admin_username}
 @app.post("/api/v1/admin/migrate")
 async def run_migration(current_user=Depends(get_admin_user)):

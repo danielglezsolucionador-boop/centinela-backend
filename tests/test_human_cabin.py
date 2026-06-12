@@ -5,20 +5,29 @@ from pathlib import Path
 
 os.environ["DATABASE_URL"] = f"sqlite:///{Path(tempfile.gettempdir()) / 'centinela_human_cabin_test.db'}"
 os.environ.setdefault("SECRET_KEY", "centinela-test-secret")
+os.environ.setdefault("ADMIN_USERNAME", "admin")
+os.environ.setdefault("ADMIN_PASSWORD", "centinela-local-dev-password-change-me")
 
 from fastapi.testclient import TestClient
 
 from main import app
 
 
+_AUTH_HEADERS: dict | None = None
+
+
 def auth_headers(client: TestClient) -> dict:
+    global _AUTH_HEADERS
+    if _AUTH_HEADERS is not None:
+        return _AUTH_HEADERS
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "daniel", "password": "centinela-local-dev-password-change-me"},
+        json={"username": "admin", "password": os.environ["ADMIN_PASSWORD"]},
     )
     assert response.status_code == 200
     token = response.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    _AUTH_HEADERS = {"Authorization": f"Bearer {token}"}
+    return _AUTH_HEADERS
 
 
 def test_human_cabin_requires_auth():
