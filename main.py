@@ -63,6 +63,7 @@ def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").lower() in {"1", "true", "yes", "on"}
 
 SERVERLESS_MODE = _env_flag("SERVERLESS_MODE") or _env_flag("VERCEL")
+DATABASE_URL_CONFIGURED = bool(os.environ.get("DATABASE_URL"))
 
 def _local_git_value(args: list[str], fallback: str) -> str:
     try:
@@ -1640,7 +1641,7 @@ async def get_db_columns(current_user=Depends(get_admin_user)):
         result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='events'"))
         return {"columns": [row[0] for row in result]}
 def _health_db_stats() -> tuple[dict, str | None]:
-    if SERVERLESS_MODE and not _env_flag("CENTINELA_HEALTH_CHECK_DB"):
+    if SERVERLESS_MODE and not (_env_flag("CENTINELA_HEALTH_CHECK_DB") or DATABASE_URL_CONFIGURED):
         return {}, "serverless_db_probe_skipped"
     try:
         return get_stats(), None
