@@ -1,137 +1,100 @@
 # SENTINELA Production Auth Status Report
 
-Fecha: 2026-06-12
+Fecha: 2026-06-13
 
 ## Alcance
 
-Validacion y normalizacion del contrato productivo de auth para:
+Validacion final del contrato productivo de auth para:
 
 - Backend: https://centinela-backend.vercel.app
 - Frontend: https://centinela-alpha.vercel.app
 - Cabina Humana: https://centinela-alpha.vercel.app/human-cabin
 
+No se uso `vercel env pull`.
+No se imprimio `ADMIN_PASSWORD`.
+No se imprimio token completo.
 No se tocaron DCFT, HERMES, FORJA, CEREBRO, SOMBRA, Hetzner/sombra-01 ni Render.
-No se imprimieron passwords, hashes, tokens completos ni secretos.
-No se ejecuto `vercel env pull`.
 
 ## Backup
 
 Backup prechange creado:
 
-`D:\ECOSYSTEM\BACKUPS\sentinela-auth-contract-fix-prechange-20260612-050720.zip`
+`D:\ECOSYSTEM\BACKUPS\sentinela-auth-secure-prompt-validation-prechange-20260613-062453.zip`
 
-Exclusiones aplicadas: `.env`, `.env.local`, `.vercel`, `.venv`, `node_modules`, `dist`, `logs`, `cache`, `tokens`, `secrets`, `cookies`, `__pycache__`, `.git`.
+Exclusiones aplicadas: `.env`, `.env.local`, `.env.*`, `.vercel`, `.venv`, `venv`, `node_modules`, `dist`, `logs`, `cache`, `tokens`, `secrets`, `cookies`, `__pycache__`, `.pytest_cache`, `.mypy_cache`.
 
-## Causa
+## Metodo
 
-El contrato HTTP ya exigia `username` y `password`, pero el default de admin en codigo era `daniel`.
-La orden CEO fija el contrato oficial productivo en `username=admin` salvo que exista `ADMIN_USERNAME`.
+`scripts/validate_production_auth.ps1` ahora usa este flujo:
 
-## Contrato antes
+- Si `ADMIN_PASSWORD` existe en env, lo usa sin imprimirlo.
+- Si `ADMIN_PASSWORD` no existe, solicita la clave con `Read-Host -AsSecureString`.
+- La clave se convierte a texto solo en memoria para enviar el login.
+- El BSTR intermedio se limpia con `ZeroFreeBSTR`.
+- La variable local se limpia despues del intento de login.
+- No se guarda la clave en archivo.
 
-`POST /api/v1/auth/login`:
+## Validacion productiva ejecutada
 
-- Body real: `username`, `password`.
-- Payload incompleto: HTTP 400.
-- Credenciales invalidas: HTTP 401.
-- Default admin en codigo: `daniel`.
-- Password validada contra hash en DB.
+Resultado del script con prompt seguro:
 
-## Contrato final
+- Prompt seguro: mostrado.
+- `GET /api/v1/health`: PASS HTTP 200.
+- `GET /api/v1/provenance`: PASS HTTP 200.
+- Payload incompleto: PASS HTTP 400.
+- Login incorrecto: PASS HTTP 401.
+- Token invalido `/api/v1/auth/me`: PASS HTTP 401.
+- Endpoints protegidos sin token:
+  - `/api/v1/auth/me`: PASS HTTP 401.
+  - `/api/v1/incidents`: PASS HTTP 401.
+  - `/api/v1/policy/all`: PASS HTTP 401.
+  - `/api/v1/agents/stats`: PASS HTTP 401.
+  - `/api/v1/resilience/degraded-runtime`: PASS HTTP 401.
+  - `/api/v1/governance/runtime-trust`: PASS HTTP 401.
+- Login correcto: FAIL.
+- Token enmascarado: no generado.
+- `/auth/me` con token: no ejecutado.
+- Endpoints protegidos con token: no ejecutados.
 
-`POST /api/v1/auth/login`:
+El script salio con codigo `1` porque el login correcto no devolvio HTTP 200.
 
-```json
-{
-  "username": "admin",
-  "password": "<ADMIN_PASSWORD>"
-}
-```
+## Health directo
 
-Reglas finales:
+- HTTP 200.
+- `status`: `OPERATIONAL`.
+- `mode`: `persistent`.
+- `database`: `CONNECTED`.
+- `postgresql`: no aparece como campo plano en la respuesta actual.
 
-- `ADMIN_USERNAME` se acepta desde env si existe.
-- Si `ADMIN_USERNAME` no existe, se usa `admin`.
-- El login del admin configurado compara contra `ADMIN_PASSWORD` de env.
-- El usuario admin se asegura/sincroniza en DB solo despues de password correcto.
-- El token se firma con `SECRET_KEY`.
-- La respuesta incluye `access_token`, `token`, `token_type=bearer`, `username`, `email`, `is_admin`, `role=admin`.
-- Bearer token sigue validandose en endpoints protegidos.
+## Provenance directo
 
-## Script seguro
+- HTTP 200.
+- Content-Type: `application/json`.
 
-Creado:
+## Frontend productivo
 
-`scripts/validate_production_auth.ps1`
+Validado con navegador:
 
-El script:
+- Home carga: PASS.
+- Cabina Humana carga: PASS.
+- Sentinela Habla visible: PASS.
+- Consola sin errores/warnings criticos capturados: PASS.
+- Sombra no aparece: PASS.
+- Acceso CEO publico no aparece: PASS en home; Cabina muestra texto descriptivo `Vista CEO/CEREBRO`, no acceso publico.
+- Bundles revisados: 10.
+- Frontend referencia `centinela-backend.vercel.app`: PASS.
+- Frontend no referencia Render: PASS.
+- Frontend no referencia Sombra: PASS.
 
-- Requiere `ADMIN_PASSWORD` en env local.
-- Usa `ADMIN_USERNAME` o default `admin`.
-- No imprime password.
-- No imprime token completo.
-- Enmascara token.
-- Prueba login correcto, login incorrecto, payload incompleto, token invalido, sin token, con token, health y provenance.
-- Sale con `0` solo si todo pasa.
-
-Ejecucion en esta shell:
-
-- `ADMIN_PASSWORD`: ausente.
-- Resultado: bloqueado limpiamente con `ADMIN_PASSWORD: missing`, exit code `2`.
-
-## Validacion local
+## Tests
 
 - `python -m compileall . -q`: PASS.
 - `python -m pytest -q`: PASS, 12 passed.
 - `git diff --check`: PASS.
-- Secret scan: PASS con exclusiones y allowlist de placeholders locales `local-dev` / `change-me` / `test-secret`.
+- Secret scan enfocado en archivos tocados: PASS, 0 findings.
 
-## Validacion productiva sin credenciales
+## Archivos cambiados
 
-Backend actual:
-
-- `GET /api/v1/health`: HTTP 200.
-- `GET /api/v1/provenance`: HTTP 200.
-- `POST /api/v1/auth/login` incompleto: HTTP 400.
-- `POST /api/v1/auth/login` password incorrecto: HTTP 401.
-- `GET /api/v1/auth/me` token invalido: HTTP 401.
-
-Endpoints protegidos sin token:
-
-- `GET /api/v1/auth/me`: HTTP 401.
-- `GET /api/v1/incidents`: HTTP 401.
-- `GET /api/v1/policy/all`: HTTP 401.
-- `GET /api/v1/agents/stats`: HTTP 401.
-- `GET /api/v1/resilience/degraded-runtime`: HTTP 401.
-- `GET /api/v1/governance/runtime-trust`: HTTP 401.
-
-## Frontend productivo
-
-- `https://centinela-alpha.vercel.app`: HTTP 200.
-- `https://centinela-alpha.vercel.app/human-cabin`: HTTP 200.
-- Sentinela Habla visible.
-- Sombra no aparece.
-- Acceso CEO publico no aparece.
-- Render no aparece.
-- Bundles JS revisados: 10.
-- Assets JS con error: 0.
-- Bundle frontend contiene `centinela-backend.vercel.app`.
-- Bundle frontend no contiene Render.
-- CORS health desde origin frontend: HTTP 200.
-- `Access-Control-Allow-Origin`: `https://centinela-alpha.vercel.app`.
-
-## Pendiente / Bloqueo
-
-No se pudo ejecutar login correcto productivo ni endpoints con Bearer valido porque `ADMIN_PASSWORD` no esta disponible en la shell local.
-
-La orden prohibe descargar secretos de Vercel y prohibe imprimir credenciales, por lo que esta es la unica parte bloqueada.
-
-## Archivos cambiados por este fix
-
-- `core/auth.py`
-- `main.py`
-- `tests/test_human_cabin.py`
-- `tests/test_auth_contract.py`
 - `scripts/validate_production_auth.ps1`
 - `SENTINELA_PRODUCTION_AUTH_STATUS_REPORT.md`
 
@@ -139,24 +102,23 @@ La orden prohibe descargar secretos de Vercel y prohibe imprimir credenciales, p
 
 Operativo:
 
-- Contrato oficial normalizado en codigo.
-- Auth admin por env definido.
-- Bearer guards conservados.
-- Tests locales del contrato PASS.
-- Health/provenance productivos PASS.
-- Negativos auth productivos PASS.
-- Frontend productivo PASS.
-- Cabina Humana productiva PASS.
+- Script de validacion ya no depende de que Codex herede `ADMIN_PASSWORD`.
+- Prompt oculto funciona.
+- Validaciones publicas y negativas de auth pasan.
+- Frontend y Cabina Humana cargan.
 - Sentinela Habla visible.
-- CORS sin problema critico.
-- Render descartado.
-- Sombra no visible.
-- Acceso CEO publico no visible.
+- Frontend apunta a backend Vercel.
+- No hay referencia a Render ni Sombra en bundles revisados.
 
 Bloqueado:
 
-- Login correcto productivo con token valido.
-- `/auth/me` productivo con token valido.
-- Endpoints protegidos productivos con token valido.
+- Login correcto productivo no devolvio token.
+- Endpoints protegidos con token no pudieron validarse.
 
-Motivo: falta `ADMIN_PASSWORD` en env local seguro.
+Riesgo principal:
+
+- El `ADMIN_PASSWORD` ingresado por prompt no coincide con el password productivo o el backend productivo no esta usando el valor esperado.
+
+Siguiente paso:
+
+- Reintentar el script con el `ADMIN_PASSWORD` productivo correcto o rotar/sincronizar `ADMIN_PASSWORD` en Vercel Production y volver a ejecutar la validacion.

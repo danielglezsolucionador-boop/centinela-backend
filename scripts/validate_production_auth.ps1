@@ -5,9 +5,27 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$AdminPassword = $null
+$AdminPasswordBstr = [IntPtr]::Zero
 if ([string]::IsNullOrWhiteSpace($env:ADMIN_PASSWORD)) {
-  Write-Host "ADMIN_PASSWORD: missing"
-  exit 2
+  Write-Host "ADMIN_PASSWORD: secure prompt"
+  $AdminPasswordSecure = Read-Host "ADMIN_PASSWORD" -AsSecureString
+  if ($null -eq $AdminPasswordSecure -or $AdminPasswordSecure.Length -eq 0) {
+    Write-Host "ADMIN_PASSWORD: missing"
+    exit 2
+  }
+  try {
+    $AdminPasswordBstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($AdminPasswordSecure)
+    $AdminPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($AdminPasswordBstr)
+  } finally {
+    if ($AdminPasswordBstr -ne [IntPtr]::Zero) {
+      [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($AdminPasswordBstr)
+      $AdminPasswordBstr = [IntPtr]::Zero
+    }
+    $AdminPasswordSecure.Dispose()
+  }
+} else {
+  $AdminPassword = $env:ADMIN_PASSWORD
 }
 
 $AdminUsername = if ([string]::IsNullOrWhiteSpace($env:ADMIN_USERNAME)) { "admin" } else { $env:ADMIN_USERNAME }
@@ -123,9 +141,10 @@ Assert-Status "INVALID_TOKEN /api/v1/auth/me" $invalidToken @(401)
 
 $login = Invoke-Api -Method "POST" -Path "/api/v1/auth/login" -Body @{
   username = $AdminUsername
-  password = $env:ADMIN_PASSWORD
+  password = $AdminPassword
 }
 Assert-Status "LOGIN_CORRECT" $login @(200)
+$AdminPassword = $null
 
 $token = $login.Json.access_token
 if ([string]::IsNullOrWhiteSpace($token) -and $login.Json.token) {
