@@ -64,7 +64,7 @@ El script salio con codigo `1` porque el login correcto no devolvio HTTP 200.
 - `status`: `OPERATIONAL`.
 - `mode`: `persistent`.
 - `database`: `CONNECTED`.
-- `postgresql`: no aparece como campo plano en la respuesta actual.
+- `engines.postgresql`: `ONLINE`.
 
 ## Provenance directo
 
