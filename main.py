@@ -86,16 +86,14 @@ def _deployment_target_default() -> str:
     vercel_url = os.environ.get("VERCEL_URL")
     if vercel_url:
         return f"https://{vercel_url}"
-    return "Render backend: https://centinela-backend-kzwk.onrender.com"
+    return "https://centinela-backend.vercel.app"
 
 PROVENANCE_BRANCH = (
     os.environ.get("VERCEL_GIT_COMMIT_REF")
-    or os.environ.get("RENDER_GIT_BRANCH")
     or _local_git_value(["branch", "--show-current"], "main")
 )
 PROVENANCE_COMMIT = (
     os.environ.get("VERCEL_GIT_COMMIT_SHA")
-    or os.environ.get("RENDER_GIT_COMMIT")
     or os.environ.get("GIT_COMMIT")
     or _local_git_value(["rev-parse", "HEAD"], "unknown")
 )
@@ -844,7 +842,7 @@ def _is_deploy_relevant_status_path(label: str, repo_path: str) -> bool:
         return repo_path.startswith(prefixes) or repo_path in exact
     if label == "backend":
         prefixes = ("core/", "api/", "models/", "migrations/", "alembic/")
-        exact = {"main.py", "requirements.txt", "render.yaml", "Procfile", "alembic.ini"}
+        exact = {"main.py", "requirements.txt", "vercel.json", "Procfile", "alembic.ini"}
         return repo_path.startswith(prefixes) or repo_path in exact
     return True
 

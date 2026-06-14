@@ -12,7 +12,7 @@ Fecha: Mayo 2026
 
 ## URLs
 
-- Backend: `https://centinela-backend-kzwk.onrender.com`
+- Backend: `https://centinela-backend.vercel.app`
 - Frontend actual: `https://centinela-alpha.vercel.app`
 - Frontend legacy permitido: `https://centinela-btdd.vercel.app`
 - Repo Backend: `github.com/danielglezsolucionador-boop/centinela-backend`

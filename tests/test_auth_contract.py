@@ -60,6 +60,22 @@ def test_login_contract_rejects_incomplete_payload():
     assert response.json()["detail"] == "Username and password required"
 
 
+def test_cors_preflight_allows_production_frontend_origin():
+    with TestClient(app) as client:
+        response = client.options(
+            "/api/v1/auth/login",
+            headers={
+                "Origin": "https://centinela-alpha.vercel.app",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type,authorization",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://centinela-alpha.vercel.app"
+    assert "POST" in response.headers["access-control-allow-methods"]
+
+
 def test_auth_me_rejects_invalid_token():
     with TestClient(app) as client:
         response = client.get(

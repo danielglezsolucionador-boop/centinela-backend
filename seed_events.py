@@ -4,7 +4,7 @@ import time
 
 import requests
 
-BASE_URL = os.environ.get("CENTINELA_SEED_BASE", "https://centinela-backend-kzwk.onrender.com")
+BASE_URL = os.environ.get("CENTINELA_SEED_BASE", "https://centinela-backend.vercel.app")
 SEED_USERNAME = os.environ.get("CENTINELA_SEED_USERNAME")
 SEED_PASSWORD = os.environ.get("CENTINELA_SEED_PASSWORD")
 

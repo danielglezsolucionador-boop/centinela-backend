@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://centinela-backend-kzwk.onrender.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://centinela-backend.vercel.app';
 
 export const api = {
   async health() {

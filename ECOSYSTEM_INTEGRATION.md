@@ -25,7 +25,7 @@ Funcion principal: sendPromptToCentinela(params: CentinelaEvent)
 }
 
 ## Endpoint directo
-POST https://centinela-backend-kzwk.onrender.com/api/v1/prompt/analyze
+POST https://centinela-backend.vercel.app/api/v1/prompt/analyze
 Body: { content, agent, user, model }
 
 ## Agentes del ecosistema
