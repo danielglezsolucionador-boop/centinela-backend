@@ -8,7 +8,7 @@ from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import Column, String, Boolean, DateTime
-from core.database import Base, SessionLocal, engine
+from core.database import Base, SessionLocal, engine, ensure_schema_compatibility
 
 # â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 SECRET_KEY = os.environ.get("SECRET_KEY")
@@ -111,6 +111,11 @@ def create_user(username: str, email: str, password: str, is_admin: bool = False
         db.close()
 
 def ensure_admin_user(username: str, password: str, email: str | None = None):
+    try:
+        Base.metadata.create_all(bind=engine)
+        ensure_schema_compatibility()
+    except Exception as e:
+        print(f"admin schema compatibility skipped: {e}")
     db = SessionLocal()
     try:
         user = db.query(UserModel).filter(UserModel.username == username).first()

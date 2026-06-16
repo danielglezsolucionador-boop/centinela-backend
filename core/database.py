@@ -177,6 +177,7 @@ def init_db() -> bool:
 def ensure_schema_compatibility():
     """Apply small idempotent migrations for pre-Phase schemas."""
     _ensure_events_user_id_column()
+    _ensure_users_auth_columns()
 
 def _ensure_events_user_id_column():
     with engine.begin() as conn:
@@ -195,6 +196,43 @@ def _ensure_events_user_id_column():
             conn.execute(text("ALTER TABLE events ADD COLUMN user_id VARCHAR"))
 
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_events_user_id ON events (user_id)"))
+
+def _ensure_users_auth_columns():
+    managed_columns = {"id", "email", "username", "hashed_password", "is_active", "is_admin", "created_at"}
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        table_names = inspector.get_table_names()
+        if "users" not in table_names:
+            return
+
+        columns = {column["name"] for column in inspector.get_columns("users")}
+        migrations = {
+            "email": "ALTER TABLE users ADD COLUMN email VARCHAR",
+            "username": "ALTER TABLE users ADD COLUMN username VARCHAR",
+            "hashed_password": "ALTER TABLE users ADD COLUMN hashed_password VARCHAR",
+            "is_active": "ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE",
+            "is_admin": "ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE",
+            "created_at": "ALTER TABLE users ADD COLUMN created_at TIMESTAMP",
+        }
+        for name, statement in migrations.items():
+            if name not in columns:
+                conn.execute(text(statement))
+
+        refreshed_columns = inspect(conn).get_columns("users")
+        refreshed = {column["name"] for column in refreshed_columns}
+        if conn.dialect.name == "postgresql":
+            preparer = conn.dialect.identifier_preparer
+            for column in refreshed_columns:
+                name = column["name"]
+                if name not in managed_columns and not column.get("nullable", True):
+                    conn.execute(text(f"ALTER TABLE users ALTER COLUMN {preparer.quote(name)} DROP NOT NULL"))
+
+        if "is_active" in refreshed:
+            conn.execute(text("UPDATE users SET is_active = TRUE WHERE is_active IS NULL"))
+        if "is_admin" in refreshed:
+            conn.execute(text("UPDATE users SET is_admin = TRUE WHERE username = 'admin' AND is_admin IS NULL"))
+        if "created_at" in refreshed:
+            conn.execute(text("UPDATE users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
 
 def get_db():
     db = SessionLocal()
