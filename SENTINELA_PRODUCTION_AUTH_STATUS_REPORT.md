@@ -36,7 +36,10 @@ Exclusiones aplicadas: `.env`, `.env.local`, `.env.*`, `.vercel`, `.venv`, `venv
 - Se agrego compatibilidad idempotente en backend:
   - `core/database.py`: asegura columnas auth esperadas en `users` y relaja `NOT NULL` de columnas heredadas no gestionadas por el modelo actual.
   - `core/auth.py`: ejecuta compatibilidad de schema antes de sincronizar el admin.
-- Deploy final backend: `https://centinela-backend-rh3kjgycb.vercel.app`, READY y aliasado a `https://centinela-backend.vercel.app`.
+- Deploy de cierre auth: `https://centinela-backend-rh3kjgycb.vercel.app`, READY y aliasado a `https://centinela-backend.vercel.app`.
+- Commit backend versionado y empujado: `eb27ab9`.
+- Deploy final versionado posterior: `https://centinela-backend-qn8pleltk.vercel.app`, READY y aliasado a `https://centinela-backend.vercel.app`.
+- Validacion corta posterior al deploy final versionado: login correcto PASS HTTP 200, token presente, `/api/v1/auth/me` PASS HTTP 200, health PASS HTTP 200, provenance PASS HTTP 200.
 
 ## Validacion auth productiva
 
